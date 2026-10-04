@@ -25,7 +25,7 @@ console.log('Privileged signup RPC is inaccessible to public clients');
 if(!code){console.log('No disposable signup fixture configured; full-flow check skipped');process.exit(0);}
 const browser=await chromium.launch();
 try{
- const context=await browser.newContext();const page=await context.newPage();
+ const context=await browser.newContext({baseURL:site});const page=await context.newPage();
  await page.goto(`${site}/signup`,{waitUntil:'domcontentloaded'});
  await page.getByRole('heading',{name:'가족 계정 만들기'}).waitFor();
  await page.getByLabel('아이디',{exact:true}).fill(username);
@@ -38,7 +38,7 @@ try{
  const reply=await replyPromise;
  if(reply.status()===403){console.log('No active disposable signup fixture provisioned; full-flow check skipped');await context.close();}
  else{
-  assert.equal(reply.status(),201,'Code-validated signup must succeed');
+  assert.equal(reply.status(),201,`Code-validated signup must succeed: ${await reply.text()}`);
   await page.getByRole('heading',{name:'집계표',exact:true}).waitFor({timeout:30000});
   const month=koreaDate().slice(0,7);const ledgerPath=`/api/ledger?month=${month}`;
   const initial=await(await page.request.get(ledgerPath)).json();

@@ -35,7 +35,7 @@ DB에는 가족/구성원, 귀속, 분류, 결제수단, 계좌·카드, 단일 
 
 회원가입 서버 `supabase/functions/money-signup/index.ts`는 Supabase Edge Function으로 배포한다. 기본 서버 환경의 `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY`를 사용하고 관리자 키는 브라우저로 보내지 않는다. 이 함수는 로그인 전 호출할 수 있지만 가입 코드를 서버에서 검증해야 계정을 생성한다. 관련 RPC는 service_role만 실행할 수 있다.
 
-추가 마이그레이션 `supabase/migrations/20261004015432_username_code_signup.sql`은 이미 기존 프로젝트에 적용했다. Auth 트리거가 서버 발급 가입 요청과 코드 상태를 다시 검사하여 계정과 가족 구성원을 함께 저장한다. 직접 Auth 가입이나 `user_metadata` 위조로는 가입할 수 없다. 관리자 SQL 테스트 자료 생성은 별도 신뢰 경로이며 일반 Auth 연결에는 해당 예외를 적용하지 않는다.
+추가 마이그레이션 `20261004015432_username_code_signup.sql`과 `20261004021643_bind_signup_user_id.sql`은 이미 기존 프로젝트에 적용했다. Auth 트리거가 Admin API를 통해 지정한 서버 발급 계정 UUID, 가입 요청과 코드 상태를 다시 검사하여 계정과 가족 구성원을 함께 저장한다. 직접 Auth 가입이나 `user_metadata` 위조로는 가입할 수 없다. 관리자 SQL 테스트 자료 생성은 별도 신뢰 경로이며 일반 Auth 연결에는 해당 예외를 적용하지 않는다.
 
 정상 가입 후 자동 로그인한다. 첫 번째 가족 구성원은 owner, 이후는 editor이며 원장의 귀속(상화·하율·기타)과 작성자 이름은 별도다. 실제 사용할 계좌·카드는 로그인 후 설정 메뉴에서 등록한다.
 

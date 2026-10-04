@@ -49,11 +49,11 @@ export async function handleSignup(request: Request, env: Environment, fetcher: 
     if (reservation.error === "username_taken") return reply({ error: "이미 사용 중이거나 가입 처리 중인 아이디입니다." }, 409);
     if (typeof reservation.ticket !== "string" || typeof reservation.email !== "string") return reply({ error: "가입 정보를 확인하세요." }, 400);
     ticket = reservation.ticket;
-    // Admin credentials never leave this server. The Auth trigger verifies this
-    // server-issued ticket and adds membership in the same user creation transaction.
+    // Auth applies app_metadata after inserting the user. Its Admin API accepts
+    // a server-chosen UUID; public signup does not. Bind the private reservation
+    // to that UUID and enroll membership atomically in the insertion trigger.
     const created = await post("/auth/v1/admin/users", {
-      email: reservation.email, password: input.password, email_confirm: true,
-      app_metadata: { ledger_signup_ticket: ticket },
+      id: ticket, email: reservation.email, password: input.password, email_confirm: true,
     });
     if (!created.ok) {
       return reply({ error: [409, 422].includes(created.status) ? "이미 사용 중인 아이디입니다. 로그인하거나 다른 아이디를 입력하세요." : "가입 처리에 실패했습니다. 잠시 후 다시 시도하세요." }, [409, 422].includes(created.status) ? 409 : 503);

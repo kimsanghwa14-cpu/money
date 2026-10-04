@@ -30,10 +30,10 @@ test('Wrong invitation and duplicate username never reach Auth account creation'
   assert.equal(response.status,status);assert.equal(s.calls.some(c=>c.path.includes('/auth/')),false);
  }
 });
-test('Signup creates a user only with a server-issued trusted ticket and never returns admin secrets',async()=>{
+test('Signup binds user UUID to a server-issued reservation and never returns admin secrets',async()=>{
  const s=server();const response=await handleSignup(request(),env,s.fetcher);
  assert.equal(response.status,201);assert.deepEqual(await response.json(),{created:true});
- assert.deepEqual(s.calls.find(c=>c.path.includes('/auth/'))?.body,{email:'sang_01@id.money.invalid',password:input.password,email_confirm:true,app_metadata:{ledger_signup_ticket:'server-ticket'}});
+ assert.deepEqual(s.calls.find(c=>c.path.includes('/auth/'))?.body,{id:'server-ticket',email:'sang_01@id.money.invalid',password:input.password,email_confirm:true});
  assert.equal(response.headers.get('access-control-allow-origin'),origin);
  assert.equal(response.headers.get('cache-control'),'private, no-store');
  assert.equal(s.calls.at(-1)?.path,'/rest/v1/rpc/cancel_signup');
