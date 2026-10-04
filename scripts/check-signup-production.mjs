@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { chromium } from '@playwright/test';
 import { MONEY_PUBLIC_CONFIG } from '../src/lib/supabase/config.ts';
 import { blankRow, koreaDate } from '../src/lib/domain.ts';
+import { verifyAssetsAndModification } from './check-assets-production.mjs';
 const url=MONEY_PUBLIC_CONFIG.NEXT_PUBLIC_SUPABASE_URL,site=MONEY_PUBLIC_CONFIG.NEXT_PUBLIC_SITE_URL;
 const headers={apikey:MONEY_PUBLIC_CONFIG.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json',Origin:site};
 const username=`signup_ci_${(process.env.GITHUB_SHA??'local').slice(0,8)}`;
@@ -51,7 +52,7 @@ try{
   const saved=await page.request.post('/api/transactions',{headers:{origin:site},data:{request_id:randomUUID(),upserts:[row],deletes:[]}});
   assert.ok(saved.ok(),'Newly registered user can save a ledger transaction');
   await page.reload();await page.getByRole('heading',{name:'집계표',exact:true}).waitFor();
-  const persisted=await(await page.request.get(ledgerPath)).json();const tx=persisted.transactions.find(t=>t.id===row.id);
+  const persisted=await(await page.request.get(ledgerPath)).json();let tx=persisted.transactions.find(t=>t.id===row.id);
   assert.equal(tx.amount,1000);assert.equal(tx.description,description);
   await page.getByRole('button',{name:'로그아웃',exact:true}).click();
   await page.getByLabel('아이디',{exact:true}).fill(username.toUpperCase());
@@ -63,6 +64,7 @@ try{
   const duplicate=await fetch(`${url}/functions/v1/money-signup`,{method:'POST',headers,body:JSON.stringify({username,displayName:'중복 검증',password,code}),signal:AbortSignal.timeout(15000)});
   assert.equal(duplicate.status,409,'Duplicate usernames must be rejected');
   console.log('Duplicate username rejection passed');
+  tx=await verifyAssetsAndModification(page,tx,ledgerPath);
   const cleaned=await page.request.post('/api/transactions',{headers:{origin:site},data:{request_id:randomUUID(),upserts:[],deletes:[{id:tx.id,version:tx.version}]}});assert.ok(cleaned.ok());
   await page.getByRole('button',{name:'로그아웃',exact:true}).click();
   await context.close();

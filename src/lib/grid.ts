@@ -45,7 +45,7 @@ export function pasteRows(rows: Draft[], text: string, startRow: number, startCo
   let cells = parseDelimited(text);
   if (cells[0]?.[0] === "날짜") cells = cells.slice(1);
   if (startRow + cells.length > 1000) throw new Error("한 번에 입력 가능한 행은 1,000건입니다.");
-  if (cells.some(r => r.length > columns.length - startCol)) throw new Error("붙여넣을 열이 표시된 열보다 많습니다. 보조 열을 표시하거나 가져오기 메뉴에서 매핑하세요.");
+  if (cells.some(r => r.length > columns.length - startCol)) throw new Error("붙여넣을 열이 표시된 열보다 많습니다. 보조 열을 표시하거나 복사할 열 수를 조정하세요.");
   const next = rows.map(r => ({ ...r }));
   cells.forEach((values, i) => {
     const index = startRow + i;

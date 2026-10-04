@@ -5,6 +5,7 @@ import { POST as transactions } from "./api/transactions.ts";
 import { POST as budgets } from "./api/budgets.ts";
 import { POST as settings } from "./api/settings.ts";
 import { POST as recurring } from "./api/recurring.ts";
+import { GET as readAssets, POST as writeAssets } from "./api/assets.ts";
 
 const routes: Record<string, { method: string; handle: (request: Request, runtime: ServerRuntime) => Promise<Response> }> = {
   "/api/ledger": { method: "GET", handle: ledger },
@@ -21,7 +22,13 @@ const routes: Record<string, { method: string; handle: (request: Request, runtim
 };
 
 export async function dispatchApi(request: Request, runtime: ServerRuntime): Promise<Response> {
-  const route = routes[new URL(request.url).pathname];
+  const path = new URL(request.url).pathname;
+  if (path === "/api/assets") {
+    if (request.method === "GET") return readAssets(request, runtime);
+    if (request.method === "POST") return writeAssets(request, runtime);
+    return Response.json({ error: "허용되지 않은 요청 방식입니다." }, { status: 405, headers: { Allow: "GET, POST" } });
+  }
+  const route = routes[path];
   if (!route) return Response.json({ error: "API를 찾을 수 없습니다." }, { status: 404 });
   if (request.method !== route.method) {
     return Response.json({ error: "허용되지 않은 요청 방식입니다." }, { status: 405, headers: { Allow: route.method } });

@@ -36,16 +36,17 @@ test("Pages verifies login and approved family membership", async () => {
 test("Every Pages data route requires an authenticated approved family", async () => {
   for (const [user, member, status] of [[false, true, 401], [true, false, 403]] as const) {
     const { value, calls } = runtime({ user, member });
-    for (const path of ["transactions", "budgets", "settings", "recurring"]) {
+    for (const path of ["transactions", "budgets", "settings", "recurring", "assets"]) {
       assert.equal((await dispatchApi(request(`/api/${path}`, "POST", {}), value)).status, status);
     }
     assert.equal((await dispatchApi(request("/api/ledger?month=2026-10"), value)).status, status);
+    assert.equal((await dispatchApi(request("/api/assets"), value)).status, status);
     assert.equal(calls.length, 0);
   }
 });
 test("Pages prevents writes from a different origin on all write routes", async () => {
   const { value, calls } = runtime();
-  for (const path of ["transactions", "budgets", "settings", "recurring"]) {
+  for (const path of ["transactions", "budgets", "settings", "recurring", "assets"]) {
     assert.equal((await dispatchApi(request(`/api/${path}`, "POST", {}, "https://other.example"), value)).status, 403);
   }
   assert.equal(calls.length, 0);
@@ -64,7 +65,7 @@ test("Pages ledger passes the approved family and requested month to the existin
 test("Pages rejects invalid months and invalid save payloads before RPC", async () => {
   const { value, calls } = runtime();
   assert.equal((await dispatchApi(request("/api/ledger?month=invalid"), value)).status, 400);
-  for (const path of ["transactions", "budgets", "settings", "recurring"]) {
+  for (const path of ["transactions", "budgets", "settings", "recurring", "assets"]) {
     assert.equal((await dispatchApi(request(`/api/${path}`, "POST", {}), value)).status, 400);
   }
   assert.equal(calls.length, 0);

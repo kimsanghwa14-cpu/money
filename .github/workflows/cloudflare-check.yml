@@ -16,6 +16,7 @@ jobs:
       - run: npm install
       - run: npm test
       - run: npm run test:signup
+      - run: npm run test:assets
       - run: npm run test:pages
       - run: npm run typecheck
       - run: npm run build
@@ -29,4 +30,4 @@ jobs:
       - name: Verify code gating, signup, login and ledger persistence in a disposable family
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: node scripts/check-signup-production.mjs
-        timeout-minutes: 3
+        timeout-minutes: 5
