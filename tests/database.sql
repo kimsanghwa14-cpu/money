@@ -60,16 +60,16 @@ begin
  perform pg_temp.assert_true((select count(*)=1 from public.recurrence_occurrences where rule_id=r_id and month='2024-02'),'unique monthly occurrence');
  select transaction_id into tx_id from public.recurrence_occurrences where rule_id=r_id and month='2024-02';
  perform pg_temp.assert_true((select date='2024-02-29' and status='planned' from public.transactions where id=tx_id),'leap-year month end and planned status');
- select to_jsonb(t)||jsonb_build_object('status','confirmed','amount',900) into occurrence_payload from public.transactions t where id=tx_id;
+ select to_jsonb(t)||jsonb_build_object('status','confirmed','amount',900) into occurrence_payload from public.transactions_visible t where id=tx_id;
  perform public.save_transactions(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(occurrence_payload),'deletes','[]'::jsonb));
  perform public.ensure_recurring_month(f,'2024-03');select transaction_id into tx_id from public.recurrence_occurrences where rule_id=r_id and month='2024-03';
- select to_jsonb(t)||jsonb_build_object('status','cancelled') into occurrence_payload from public.transactions t where id=tx_id;
+ select to_jsonb(t)||jsonb_build_object('status','cancelled') into occurrence_payload from public.transactions_visible t where id=tx_id;
  perform public.save_transactions(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(occurrence_payload),'deletes','[]'::jsonb));
  perform public.ensure_recurring_month(f,'2024-03');perform pg_temp.assert_true((select status='cancelled' from public.transactions where id=tx_id),'skip persists');
  select id into revision_id from public.recurring_versions where recurring_versions.rule_id=r_id order by revision desc limit 1;
  perform public.save_recurring_rule(f,gen_random_uuid(),rule||jsonb_build_object('id',revision_id,'rule_id',r_id,'effective_month',current_month,'amount',2000));
  perform public.ensure_recurring_month(f,'2024-02');
- perform pg_temp.assert_true((select t.amount=900 and t.planned_amount=1000 and t.status='confirmed' from public.transactions t join public.recurrence_occurrences o on o.transaction_id=t.id where o.rule_id=r_id and o.month='2024-02'),'past confirmed original and plan preserved');
+ perform pg_temp.assert_true((select t.amount=900 and t.planned_amount=1000 and t.status='confirmed' from public.transactions_visible t join public.recurrence_occurrences o on o.transaction_id=t.id where o.rule_id=r_id and o.month='2024-02'),'past confirmed original and plan preserved');
  perform pg_temp.assert_true((public.load_ledger(f,'2024-02',false)->'transactions'->0->>'status')='confirmed','DB snapshot returned');
  failed:=false;begin update public.transactions set amount=99 where id=first_id; exception when insufficient_privilege then failed:=true;end;
  perform pg_temp.assert_true(failed,'direct write bypass blocked');
@@ -78,7 +78,7 @@ end $$;
 select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
 do $$ declare f uuid:='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; tx_id uuid; payload jsonb; begin
  select value into tx_id from fixture_keys where key='first';
- select to_jsonb(t)||jsonb_build_object('owner','상화') into payload from public.transactions t where id=tx_id;
+ select to_jsonb(t)||jsonb_build_object('owner','상화') into payload from public.transactions_visible t where id=tx_id;
  perform public.save_transactions(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(payload),'deletes','[]'::jsonb));
  perform pg_temp.assert_true((select owner='상화' and updated_by='22222222-2222-4222-8222-222222222222' from public.transactions where id=tx_id),'actor differs from attribution');
 end $$;
