@@ -1,3 +1,4 @@
+-- Filename matches the applied money project migration history.
 begin;
 -- A consistent family snapshot; PostgREST row limits cannot silently truncate reports.
 create function public.load_ledger(p_family uuid,p_month text,p_annual boolean default false) returns jsonb

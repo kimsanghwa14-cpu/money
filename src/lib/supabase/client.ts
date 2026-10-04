@@ -1,6 +1,7 @@
 import { createBrowserClient } from "@supabase/ssr";
-import { configured } from "./config";
+import { browserConfig, configured } from "./config";
 export function browserClient() {
-  if (!configured()) throw new Error("Supabase 연결 설정이 필요합니다.");
-  return createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
+  const config = browserConfig();
+  if (!configured(config)) throw new Error("Supabase 연결 설정이 필요합니다.");
+  return createBrowserClient(config.NEXT_PUBLIC_SUPABASE_URL!, config.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
 }

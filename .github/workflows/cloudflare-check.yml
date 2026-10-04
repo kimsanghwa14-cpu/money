@@ -21,3 +21,7 @@ jobs:
       - run: npx wrangler pages functions build --outdir /tmp/money-pages-functions
       - run: npx playwright install --with-deps chromium
       - run: npm run test:pages:browser
+      - name: Verify production DB connection and desktop/mobile login
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: node scripts/check-production.mjs
+        timeout-minutes: 5

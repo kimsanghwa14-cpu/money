@@ -1,4 +1,5 @@
--- Apply to a NEW Supabase project. Never resets or drops an existing table.
+-- Applied to the existing empty money project; filename matches its migration history.
+-- Never resets or drops an existing table. Do not reapply to an initialized project.
 begin;
 create schema if not exists extensions;
 create extension if not exists pgcrypto with schema extensions;
@@ -205,7 +206,7 @@ begin
       raise exception '%행: 다른 사용자가 변경한 거래입니다. 입력을 보존한 뒤 최신 내역과 비교하세요.',row_index using errcode='40001';
     elsif not found and expected<>0 then raise exception '%행: 원거래를 찾을 수 없습니다.',row_index using errcode='40001'; end if;
     select kind into cat_kind from public.categories where id=(item->>'category_id')::uuid and family_id=p_family;
-    if cat_kind is null or cat_kind<>case when item->>'kind'='refund' then 'expense' else item->>'kind' end then
+    if cat_kind is null or cat_kind<>(case when item->>'kind'='refund' then 'expense' else item->>'kind' end) then
       raise exception '%행: 거래유형에 맞는 분류를 선택하세요.',row_index;
     end if;
     if item->>'kind'='settlement' and not exists(select 1 from public.accounts where id=(item->>'target_account_id')::uuid and family_id=p_family and kind='card') then

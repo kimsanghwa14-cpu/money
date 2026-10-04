@@ -20,10 +20,10 @@ npm run dev
 
 **새 개발용 Supabase 프로젝트**를 만든다. 이미 쓰는 운영 DB는 초기화하지 않는다. SQL Editor에서 아래 파일 전체를 번호 순서대로 실행한다. 각각 트랜잭션이며 테이블을 삭제하지 않는다. 동일 파일을 두 번 실행하지 않는다.
 
-1. `supabase/migrations/202610030001_ledger.sql`
-2. `supabase/migrations/202610030002_snapshot.sql`
+1. `supabase/migrations/20261004012408_family_ledger_initial.sql`
+2. `supabase/migrations/20261004012420_family_ledger_snapshot.sql`
 
-또는 Supabase CLI를 쓰는 경우 검토한 새 프로젝트에만 연결한 뒤 `supabase db push`로 적용한다. 프로젝트 연결·마이그레이션은 이번 작업에서 실행하지 않았다.
+또는 Supabase CLI를 쓰는 경우 검토한 새 프로젝트에만 연결한 뒤 `supabase db push`로 적용한다. **기존 money 프로젝트(`uqwoshogxwayntrpajdi`)에는 2026-10-04 두 마이그레이션을 이미 적용했다. 해당 프로젝트에서 SQL을 다시 실행하지 않는다.** 파일명은 실제 원격 마이그레이션 이력과 일치한다.
 
 DB에는 가족/구성원, 귀속, 분류, 결제수단, 계좌·카드, 단일 거래원장, 반복규칙 버전/발생 회차, 월별 예산, 자산, 비정기 계획, 가져오기 이력, 저장 요청, 감사 이력 구조가 있다. 자산·비정기 연결·가져오기 UI는 2차 범위로 아직 제공하지 않는다.
 

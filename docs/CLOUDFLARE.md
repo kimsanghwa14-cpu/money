@@ -29,6 +29,8 @@ Deployments에서 최신 `main` 커밋을 다시 배포한다. 빌드 로그에 
 
 ## Supabase 연결
 
+기존 `money-ab4.pages.dev`에서는 공개 URL과 publishable key를 `src/lib/supabase/config.ts`에서 기본 연결 정보로 제공한다. 화면과 Pages Functions가 동일한 설정을 사용하며, Cloudflare 환경변수가 있으면 이를 우선한다. 다른 호스트와 로컬 개발에는 이 기본 연결을 적용하지 않는다. 다른 프로젝트의 URL만 지정했을 때 기존 키를 섞지 않으며, secret/service-role 키도 거부한다. 공개 키는 접근 권한을 부여하지 않는다. 인증과 가족 승인, DB RLS가 거래 접근을 제한한다.
+
 `docs/SETUP.md`의 마이그레이션·가족 승인 절차를 먼저 완료한다. Supabase → Authentication → URL Configuration에 아래 값을 등록한다.
 
 - Site URL: `https://money-ab4.pages.dev`
@@ -36,7 +38,7 @@ Deployments에서 최신 `main` 커밋을 다시 배포한다. 빌드 로그에 
 
 ## 확인
 
-1. Supabase 환경변수 없이 배포: `/`에 **가족 DB 연결이 필요합니다** 안내가 표시된다.
+1. 기존 운영 주소는 환경변수가 없어도 지정한 money DB 연결을 사용한다. 설정이 없는 다른 호스트는 `/`에 **가족 DB 연결이 필요합니다** 안내가 표시된다.
 2. 환경변수 설정 후 비로그인 상태: `/`에서 `/login`으로 이동한다.
 3. `/api/session`: 비로그인 상태는 JSON 응답 HTTP 401, DB 미설정 상태는 HTTP 503이다. HTML이나 앱 소스가 반환되면 Functions가 배포되지 않은 것이다.
 4. 승인된 가족 계정으로 로그인: 집계표와 실제 가족 데이터가 조회된다.

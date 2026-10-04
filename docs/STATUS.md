@@ -1,5 +1,19 @@
 # 구현 및 검증 상태
 
+## 최신 상태: 2026-10-04 Supabase DB 적용
+
+- 대상: 기존 프로젝트 `uqwoshogxwayntrpajdi`, 기존 사이트 `https://money-ab4.pages.dev`, 저장소 `kimsanghwa14-cpu/money`.
+- 시작 전 public 테이블·마이그레이션·Auth 계정이 모두 비어 있음을 확인했다.
+- 기존 SQL의 CASE 조건식 문법 오류를 수정하고 15개 테이블과 RPC를 적용했다. 실제 이력은 `20261004012408 family_ledger_initial`, `20261004012420 family_ledger_snapshot`이며 저장소 파일명도 이에 맞췄다.
+- 모든 테이블의 RLS 활성화, 익명 읽기 금지, 인증 사용자 직접 쓰기 금지를 확인했다.
+- `tests/database.sql`을 실제 프로젝트에서 하나의 롤백 트랜잭션으로 실행해 **DB_CHECKS_PASSED**를 확인했다. 20행 원자 저장·재시도·실패 롤백·버전 충돌·환불·고정비·가족 외 차단·귀속과 작성자 분리를 검증했다. 테스트 Auth 계정·가족·거래·요청은 남기지 않았다.
+- 로컬 도메인 테스트 17개와 Pages API/연결 설정 테스트 10개가 통과했다.
+- 기존 운영 호스트에서만 URL/publishable key의 공개 기본 설정을 적용한다. 다른 호스트와 로컬에는 적용하지 않으며, 명시한 다른 프로젝트의 설정을 덮어쓰거나 키를 섞지 않는다.
+- 보안 Advisor에는 익명 실행·RLS 누락 오류가 없었다. 가족 검사를 수행하는 인증 사용자용 SECURITY DEFINER RPC 7개에 의도된 권한 경고가 있다. 일반적인 직접 쓰기를 허용하지 않고 RPC 내에서 검증하기 위한 구조이며 외부 가족 차단 테스트가 통과했다. [해당 Advisor 설명](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable).
+- 아래는 이전 작업 기록이다. 실제 가족 계정 생성·승인·사용자 로그인·실제 운영 거래 저장은 아직 완료하지 않았다. 이메일 주소를 받아 진행해야 한다. Supabase 인증 리디렉션 관리 설정도 아직 수정하지 않았다.
+
+## 이전 작업 기록
+
 운영 가능한 최종 서비스로 검증 완료된 상태가 아니다. 1차 핵심 기능의 코드·DB 마이그레이션·테스트를 작성했고, 순수 계산/입력 검증만 실행했다. DB 연결과 앱 빌드는 현재 환경 제한 때문에 남아 있다.
 
 ## 구현한 코드

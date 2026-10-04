@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { dispatchApi } from "../src/lib/pages-router.ts";
-import { configured } from "../src/lib/supabase/config.ts";
+import { configured, MONEY_PUBLIC_CONFIG, resolvePublicConfig } from "../src/lib/supabase/config.ts";
 import type { ServerRuntime } from "../src/lib/server.ts";
 
 const site = "https://money-ab4.pages.dev";
@@ -73,4 +73,23 @@ test("Pages runtime environment validation uses the supplied bindings", () => {
   assert.equal(configured({ NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test" }), true);
   assert.equal(configured({ NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_secret_test" }), false);
   assert.equal(configured({}), false);
+});
+
+test("Public project connection is restricted to the existing production hostname", () => {
+  assert.deepEqual(resolvePublicConfig({}, "money-ab4.pages.dev"), MONEY_PUBLIC_CONFIG);
+  assert.equal(configured(resolvePublicConfig({}, "money-ab4.pages.dev")), true);
+  for (const host of ["localhost", "preview.money-ab4.pages.dev", "money-ab4.pages.dev.other.example", "other.example"]) {
+    assert.deepEqual(resolvePublicConfig({}, host), {});
+    assert.equal(configured(resolvePublicConfig({}, host)), false);
+  }
+});
+
+test("Public project defaults preserve explicit configuration and never mix projects", () => {
+  const other = { NEXT_PUBLIC_SUPABASE_URL: "https://other.supabase.co" };
+  assert.deepEqual(resolvePublicConfig(other, "money-ab4.pages.dev"), other);
+  assert.equal(configured(resolvePublicConfig(other, "money-ab4.pages.dev")), false);
+  const invalid = resolvePublicConfig({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_secret_test" }, "money-ab4.pages.dev");
+  assert.equal(configured(invalid), false);
+  const explicit = { ...MONEY_PUBLIC_CONFIG, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_rotated" };
+  assert.deepEqual(resolvePublicConfig(explicit, "money-ab4.pages.dev"), explicit);
 });
