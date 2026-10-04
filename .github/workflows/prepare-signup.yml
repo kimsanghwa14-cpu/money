@@ -1,4 +1,4 @@
-name: Prepare assets migration
+name: Prepare asset conflict migration
 on:
   push:
     branches: [codex/invite-signup]
@@ -12,7 +12,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.18.0'
-      - run: npx --yes supabase --version
-      - run: npx --yes supabase migration --help
       - run: npx --yes supabase migration new --help
-      - run: npx --yes supabase migration new asset_management
+      - run: npx --yes supabase migration new asset_conflict_response
