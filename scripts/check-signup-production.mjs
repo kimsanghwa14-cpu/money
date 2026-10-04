@@ -7,7 +7,7 @@ import { verifyAssetsAndModification } from './check-assets-production.mjs';
 const url=MONEY_PUBLIC_CONFIG.NEXT_PUBLIC_SUPABASE_URL,site=MONEY_PUBLIC_CONFIG.NEXT_PUBLIC_SITE_URL;
 const headers={apikey:MONEY_PUBLIC_CONFIG.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json',Origin:site};
 const username=`signup_ci_${(process.env.GITHUB_SHA??'local').slice(0,8)}`;
-const password=randomBytes(24).toString('hex');
+let password=randomBytes(24).toString('hex');
 // The commit-derived code is valid only when a separate disposable family was
 // provisioned for this exact run, this username, and a short expiry. It cannot
 // join the real family; its secret registration code is never used in CI.
@@ -61,6 +61,31 @@ try{
   await page.getByRole('heading',{name:'집계표',exact:true}).waitFor({timeout:30000});
   const reloaded=await(await page.request.get(ledgerPath)).json();assert.ok(reloaded.transactions.some(t=>t.id===row.id));
   console.log('Username/password relogin and saved ledger persistence passed');
+  for(const width of [1280,390]){
+   await page.setViewportSize({width,height:844});
+   await page.getByRole('button',{name:'설정',exact:false}).click();
+   await page.getByRole('heading',{name:'비밀번호 변경',exact:true}).waitFor();
+   const nextPassword=randomBytes(24).toString('hex');
+   await page.getByLabel('새 비밀번호',{exact:true}).fill(nextPassword);
+   await page.getByLabel('새 비밀번호 확인',{exact:true}).fill(`${nextPassword}x`);
+   await page.getByRole('button',{name:'비밀번호 변경',exact:true}).click();
+   await page.getByRole('alert').filter({hasText:'새 비밀번호 확인이 일치하지 않습니다.'}).waitFor();
+   await page.getByLabel('새 비밀번호 확인',{exact:true}).fill(nextPassword);
+   await page.getByRole('button',{name:'비밀번호 변경',exact:true}).click();
+   await page.getByRole('status').filter({hasText:'비밀번호를 변경했습니다.'}).waitFor();
+   assert.equal(await page.getByLabel('새 비밀번호',{exact:true}).inputValue(),'');
+   const oldLogin=await fetch(`${url}/auth/v1/token?grant_type=password`,{method:'POST',headers,body:JSON.stringify({email:`${username}@id.money.invalid`,password}),signal:AbortSignal.timeout(15000)});
+   assert.equal(oldLogin.status,400,'Previous password must no longer work');
+   password=nextPassword;
+   await page.getByRole('button',{name:'로그아웃',exact:true}).click();
+   await page.getByLabel('아이디',{exact:true}).fill(username);
+   await page.getByLabel('비밀번호',{exact:true}).fill(password);
+   await page.getByRole('button',{name:'로그인',exact:true}).click();
+   await page.getByRole('heading',{name:'집계표',exact:true}).waitFor({timeout:30000});
+   const afterChange=await(await page.request.get(ledgerPath)).json();
+   assert.ok(afterChange.transactions.some(t=>t.id===row.id),'Password change preserves ledger data');
+   console.log(`Password mismatch validation, change, old-password rejection, new-password login and data preservation passed at ${width}px`);
+  }
   const duplicate=await fetch(`${url}/functions/v1/money-signup`,{method:'POST',headers,body:JSON.stringify({username,displayName:'중복 검증',password,code}),signal:AbortSignal.timeout(15000)});
   assert.equal(duplicate.status,409,'Duplicate usernames must be rejected');
   console.log('Duplicate username rejection passed');
