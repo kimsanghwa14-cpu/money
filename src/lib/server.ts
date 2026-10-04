@@ -34,6 +34,7 @@ export function fail(error: unknown) {
   return Response.json({ error: error instanceof Error ? error.message : "요청을 처리하지 못했습니다." }, { status: error instanceof ApiError ? error.status : 500, headers: { "Cache-Control": "no-store" } });
 }
 export function dbFailure(error: { code?: string; message: string }): never {
+  if (error.code === "PT409") throw new ApiError(error.message, 409);
   if (error.code === "40001" || error.code === "23505") throw new ApiError(error.code === "23505" ? "이미 저장된 거래 ID·원본 ID 또는 같은 이름의 설정이 있습니다. 중복 내역을 확인하세요." : error.message, 409);
   if (error.code === "42501") throw new ApiError("가족 접근 권한이 없습니다.", 403);
   throw new ApiError(error.code === "23503" ? "가족에 속한 분류·계좌·원거래를 선택하세요." : error.message, 400);

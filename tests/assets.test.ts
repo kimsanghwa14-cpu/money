@@ -45,7 +45,7 @@ test("Asset API normalizes balances and never trusts client family or audit clai
 });
 test("Asset API rejects bad writes and returns a conflict without overwriting data", async () => {
   const s = apiRuntime(); assert.equal((await dispatchApi(apiRequest({ request_id: crypto.randomUUID(), upserts: [{ ...input, balance: "-1" }], deletes: [] }), s.value)).status, 400); assert.equal(s.calls.length, 0);
-  const conflict = apiRuntime(0, [], { code: "40001", message: "다른 사용자가 변경한 항목입니다." });
+  const conflict = apiRuntime(0, [], { code: "PT409", message: "다른 사용자가 변경한 항목입니다." });
   assert.equal((await dispatchApi(apiRequest({ request_id: crypto.randomUUID(), upserts: [input], deletes: [] }), conflict.value)).status, 409);
   const method = await dispatchApi(new Request("https://money-ab4.pages.dev/api/assets", { method: "DELETE" }), s.value); assert.equal(method.status, 405); assert.equal(method.headers.get("allow"), "GET, POST");
 });

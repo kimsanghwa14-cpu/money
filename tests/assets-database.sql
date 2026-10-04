@@ -20,7 +20,7 @@ do $$declare f uuid:='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'; request uuid:=gen_r
  deposit:=deposit||jsonb_build_object('version',1,'balance',1200000);
  perform public.save_assets(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(deposit),'deletes','[]'::jsonb));
  perform pg_temp.asset_check((select version=2 and balance=1200000 and updated_at>created_at and updated_by='66666666-6666-4666-8666-666666666666' from public.assets where id=(deposit->>'id')::uuid),'edit advances version and server modification time');
- denied:=false;begin perform public.save_assets(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(deposit),'deletes','[]'::jsonb));exception when serialization_failure then denied:=true;end;
+ denied:=false;begin perform public.save_assets(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(deposit),'deletes','[]'::jsonb));exception when sqlstate 'PT409' then denied:=true;end;
  perform pg_temp.asset_check(denied,'stale edit rejected');
  denied:=false;begin perform public.save_assets(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(deposit||jsonb_build_object('version',2,'balance',1),loan||jsonb_build_object('version',1,'balance',-1)),'deletes','[]'::jsonb));exception when others then denied:=true;end;
  perform pg_temp.asset_check(denied and (select balance=1200000 from public.assets where id=(deposit->>'id')::uuid),'invalid batch rolls back every row');
@@ -36,7 +36,7 @@ do $$declare denied boolean:=false; begin
  perform pg_temp.asset_check((select count(*)=0 from public.assets where family_id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),'outsider read denied');
  begin perform public.save_assets('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',gen_random_uuid(),'{"upserts":[],"deletes":[{"id":"88888888-8888-4888-8888-888888888888","version":2}]}');exception when insufficient_privilege then denied:=true;end;
  perform pg_temp.asset_check(denied,'outsider family RPC denied');
- denied:=false;begin perform public.save_assets('ffffffff-ffff-4fff-8fff-ffffffffffff',gen_random_uuid(),'{"upserts":[],"deletes":[{"id":"88888888-8888-4888-8888-888888888888","version":2}]}');exception when serialization_failure then denied:=true;end;
+ denied:=false;begin perform public.save_assets('ffffffff-ffff-4fff-8fff-ffffffffffff',gen_random_uuid(),'{"upserts":[],"deletes":[{"id":"88888888-8888-4888-8888-888888888888","version":2}]}');exception when sqlstate 'PT409' then denied:=true;end;
  perform pg_temp.asset_check(denied,'cross-family ID deletion denied');
 end$$;
 reset role;
