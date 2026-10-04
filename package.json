@@ -3,15 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=22.18.0"
-  },
+  "engines": { "node": ">=22.18.0" },
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
     "build": "vite build",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/domain.test.ts",
+    "test": "node tests/domain.test.ts && node tests/periods.test.ts",
     "test:db": "node tests/database.test.ts",
     "test:e2e": "playwright test",
     "build:next": "next build",
