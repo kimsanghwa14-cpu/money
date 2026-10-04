@@ -74,3 +74,5 @@ Supabase 프로젝트 생성·SQL 마이그레이션·가족 계정 승인·환�
 - 기존 도메인 테스트 17개와 Pages API 테스트 8개가 이 환경에서 통과했다.
 - npm 설치는 레지스트리 DNS 실패(`EAI_AGAIN`)로 실행하지 못했다. 따라서 로컬 typecheck·Vite 빌드·Functions 번들·브라우저 검증을 통과했다고 주장하지 않는다. `.github/workflows/cloudflare-check.yml`에서 해당 검증을 자동 실행하도록 구성했다.
 - 실제 Supabase 계정과 운영 DB를 사용한 로그인·저장 검증은 수행하지 않았다. Cloudflare 설정과 재배포 절차는 `docs/CLOUDFLARE.md`에 있다.
+
+GitHub Actions 원격 검증 완료: [실행 37165169604](https://github.com/kimsanghwa14-cpu/money/actions/runs/37165169604), 코드 커밋 `45b5063`. 의존성 설치·도메인/Pages API 테스트·타입 검사·Vite 빌드·Functions 번들·데스크톱/모바일 브라우저 검증 모두 통과했다. 실제 Cloudflare 프로젝트의 배포는 같은 커밋에서 실패로 기록되어 있다. 관리 화면의 빌드 설정과 로그는 현재 연결된 도구로 접근할 수 없으므로 `docs/CLOUDFLARE.md`의 설정을 프로젝트에 적용해야 한다. 원격 검증은 DB 미설정 안내와 API 라우팅 검증이며 실제 가족 DB 로그인/쓰기 성공을 의미하지 않는다.
