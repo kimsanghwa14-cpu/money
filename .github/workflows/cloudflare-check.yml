@@ -15,6 +15,7 @@ jobs:
           node-version: '22.18.0'
       - run: npm install
       - run: npm test
+      - run: npm run test:signup
       - run: npm run test:pages
       - run: npm run typecheck
       - run: npm run build
@@ -25,3 +26,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: node scripts/check-production.mjs
         timeout-minutes: 5
+      - name: Verify code gating, signup, login and ledger persistence in a disposable family
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: node scripts/check-signup-production.mjs
+        timeout-minutes: 3

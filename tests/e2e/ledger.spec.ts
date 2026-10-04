@@ -1,8 +1,8 @@
 import {test,expect,type Page} from "@playwright/test";
 import {koreaDate,blankRow,toDraft,type Transaction} from "../../src/lib/domain";
-const canWrite=process.env.E2E_ALLOW_WRITES==="true"&&!!process.env.E2E_EMAIL&&!!process.env.E2E_PASSWORD;
+const canWrite=process.env.E2E_ALLOW_WRITES==="true"&&!!process.env.E2E_USERNAME&&!!process.env.E2E_PASSWORD;
 async function login(page:Page,email:string,password:string){
- await page.goto("/login");await page.getByLabel("이메일",{exact:true}).fill(email);await page.getByLabel("비밀번호",{exact:true}).fill(password);await page.getByRole("button",{name:"로그인",exact:true}).click();await expect(page.getByRole("heading",{name:"집계표",exact:true})).toBeVisible();
+ await page.goto("/login");await page.getByLabel("아이디",{exact:true}).fill(email);await page.getByLabel("비밀번호",{exact:true}).fill(password);await page.getByRole("button",{name:"로그인",exact:true}).click();await expect(page.getByRole("heading",{name:"집계표",exact:true})).toBeVisible();
 }
 test("미로그인 사용자의 화면·API 접근을 차단한다",async({page})=>{
  test.skip(!process.env.NEXT_PUBLIC_SUPABASE_URL,"Supabase 설정이 필요합니다.");
@@ -14,11 +14,11 @@ test("DB 미연결 상태를 명확히 표시한다",async({page})=>{
  await page.goto("/");await expect(page.getByText("! DB 미연결")).toBeVisible();await expect(page.getByRole("button",{name:"변경사항 저장"})).toHaveCount(0);
 });
 test("두 가족 사용자가 동시에 수정하면 한 요청만 저장되고 다른 요청은 충돌한다",async({page,browser})=>{
- test.skip(!canWrite||!process.env.E2E_SECOND_EMAIL||!process.env.E2E_SECOND_PASSWORD,"같은 테스트 가족의 서로 다른 계정 두 개가 필요합니다.");
+ test.skip(!canWrite||!process.env.E2E_SECOND_USERNAME||!process.env.E2E_SECOND_PASSWORD,"같은 테스트 가족의 서로 다른 계정 두 개가 필요합니다.");
  const second=await browser.newContext(),other=await second.newPage(),month=koreaDate().slice(0,7),run=`동시수정가상-${crypto.randomUUID()}`;
  let id="";
  try{
-   await login(page,process.env.E2E_EMAIL!,process.env.E2E_PASSWORD!);await login(other,process.env.E2E_SECOND_EMAIL!,process.env.E2E_SECOND_PASSWORD!);
+   await login(page,process.env.E2E_USERNAME!,process.env.E2E_PASSWORD!);await login(other,process.env.E2E_SECOND_USERNAME!,process.env.E2E_SECOND_PASSWORD!);
    const initial=await(await page.request.get(`/api/ledger?month=${month}`)).json(),secondInitial=await(await other.request.get(`/api/ledger?month=${month}`)).json();
    expect(initial.family.id).toBe(secondInitial.family.id);expect(initial.member.user_id).not.toBe(secondInitial.member.user_id);
    const row={...blankRow("상화",month,initial.categories),description:run,amount:"1,000"};id=row.id;
@@ -41,7 +41,7 @@ test("두 가족 사용자가 동시에 수정하면 한 요청만 저장되고 
 test("20행 일괄 저장·실패 입력 보존·재로그인 영속성·귀속 집계",async({page})=>{
  test.skip(!canWrite,"승인된 전용 테스트 가족 계정과 E2E_ALLOW_WRITES=true가 필요합니다.");
  const run=`자동화가상-${crypto.randomUUID()}`,month=koreaDate().slice(0,7);
- await page.goto("/login");await page.getByLabel("이메일",{exact:true}).fill(process.env.E2E_EMAIL!);await page.getByLabel("비밀번호",{exact:true}).fill(process.env.E2E_PASSWORD!);await page.getByRole("button",{name:"로그인",exact:true}).click();await expect(page.getByRole("heading",{name:"집계표",exact:true})).toBeVisible();
+ await page.goto("/login");await page.getByLabel("아이디",{exact:true}).fill(process.env.E2E_USERNAME!);await page.getByLabel("비밀번호",{exact:true}).fill(process.env.E2E_PASSWORD!);await page.getByRole("button",{name:"로그인",exact:true}).click();await expect(page.getByRole("heading",{name:"집계표",exact:true})).toBeVisible();
  const initial=await(await page.request.get(`/api/ledger?month=${month}`)).json();expect(initial.transactions).toHaveLength(0);
  await page.getByRole("button",{name:"기타 · 전체 내역",exact:true}).click();await page.getByRole("button",{name:"+ 행 추가",exact:true}).click();
  const cell=page.locator('.ledger-table [data-row="0"][data-col="0"]');
@@ -54,7 +54,7 @@ test("20행 일괄 저장·실패 입력 보존·재로그인 영속성·귀속 
  try{
    await page.reload();const response=await page.request.get(`/api/ledger?month=${month}`);expect(response.ok()).toBeTruthy();const data=await response.json();const rows=(data.transactions as Transaction[]).filter(t=>t.description.startsWith(run));expect(rows).toHaveLength(20);expect(rows.reduce((n,t)=>n+t.amount,0)).toBe(20000);
    for(const owner of ["상화","하율","기타"]){expect(rows.some(t=>t.owner===owner)).toBeTruthy();}
-   await page.getByRole("button",{name:"로그아웃",exact:true}).click();await page.getByLabel("이메일",{exact:true}).fill(process.env.E2E_EMAIL!);await page.getByLabel("비밀번호",{exact:true}).fill(process.env.E2E_PASSWORD!);await page.getByRole("button",{name:"로그인",exact:true}).click();await expect(page.getByRole("heading",{name:"집계표",exact:true})).toBeVisible();
+   await page.getByRole("button",{name:"로그아웃",exact:true}).click();await page.getByLabel("아이디",{exact:true}).fill(process.env.E2E_USERNAME!);await page.getByLabel("비밀번호",{exact:true}).fill(process.env.E2E_PASSWORD!);await page.getByRole("button",{name:"로그인",exact:true}).click();await expect(page.getByRole("heading",{name:"집계표",exact:true})).toBeVisible();
    const persisted=await (await page.request.get(`/api/ledger?month=${month}`)).json();expect(persisted.transactions.filter((t:Transaction)=>t.description.startsWith(run))).toHaveLength(20);
  }finally{
    const data=await(await page.request.get(`/api/ledger?month=${month}`)).json();const rows=(data.transactions as Transaction[]).filter(t=>t.description.startsWith(run));

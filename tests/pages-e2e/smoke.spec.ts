@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test("built Pages app renders setup guidance instead of a blank screen", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  for (const path of ["/", "/login"]) {
+  for (const path of ["/", "/login", "/signup"]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { name: "가족 DB 연결이 필요합니다." })).toBeVisible();
     await expect(page.getByText("Cloudflare의 사이트 설정에서", { exact: false })).toBeVisible();

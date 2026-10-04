@@ -19,7 +19,8 @@
     "preview:pages": "npm run build && wrangler pages dev dist --port 3000",
     "deploy:pages": "npm run build && wrangler pages deploy dist --project-name money",
     "test:pages": "node tests/pages.test.ts",
-    "test:pages:browser": "playwright test --config playwright.pages.config.ts"
+    "test:pages:browser": "playwright test --config playwright.pages.config.ts",
+    "test:signup": "node tests/signup.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",

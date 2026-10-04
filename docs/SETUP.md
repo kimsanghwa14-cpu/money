@@ -27,27 +27,17 @@ npm run dev
 
 DB에는 가족/구성원, 귀속, 분류, 결제수단, 계좌·카드, 단일 거래원장, 반복규칙 버전/발생 회차, 월별 예산, 자산, 비정기 계획, 가져오기 이력, 저장 요청, 감사 이력 구조가 있다. 자산·비정기 연결·가져오기 UI는 2차 범위로 아직 제공하지 않는다.
 
-## 3. 인증과 가족 승인
+## 3. 아이디 로그인과 코드 회원가입
 
-Supabase Authentication에서 이메일 로그인을 켜고 **공개 회원가입을 비활성화**한다. URL Configuration의 Site URL과 Redirect URLs에 개발 주소 및 `http://localhost:3000/auth/callback`을 등록한다. Codespaces/Vercel에서는 해당 실제 주소와 `/auth/callback` 경로도 등록한다.
+기존 운영 주소의 `/signup`에서 아이디, 표시 이름, 비밀번호, 비밀번호 확인, 가입 코드를 입력한다. 아이디는 영문·숫자·밑줄 3~24자이며 대소문자를 구분하지 않는다. 이메일 주소를 입력하거나 인증 메일을 받을 필요가 없다. Supabase Auth 내부에는 아이디별 인증용 식별자를 사용하며 실제 이메일 발송에는 사용하지 않는다.
 
-Authentication → Users에서 가족 계정 두 개를 만든다. 비밀번호 로그인은 비밀번호가 설정된 계정을 사용한다. 기존 계정은 이메일 로그인 링크도 사용할 수 있다. 운영 이메일 발송에는 Supabase SMTP 설정과 발송 제한도 확인한다. 이번 작업은 계정을 만들거나 이메일을 발송하지 않았다.
+회원가입 코드는 별도로 전달하며 소스 코드나 환경변수 예시에 넣지 않는다. DB의 `ledger_private.signup_codes`에는 코드의 SHA-256 해시만 저장한다. 가족과 연결된 활성 코드만 가입에 사용할 수 있다. 코드 폐기·교체는 관리 권한으로 해당 테이블을 갱신한다.
 
-두 계정의 **User UID**를 확인하고 SQL Editor에서 아래 예시를 실제 UID로 바꾸어 실행한다. 이메일이나 비밀번호는 SQL에 적지 않는다. UUID 예시 문자열을 그대로 실행하면 안 된다.
+회원가입 서버 `supabase/functions/money-signup/index.ts`는 Supabase Edge Function으로 배포한다. 기본 서버 환경의 `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY`를 사용하고 관리자 키는 브라우저로 보내지 않는다. 이 함수는 로그인 전 호출할 수 있지만 가입 코드를 서버에서 검증해야 계정을 생성한다. 관련 RPC는 service_role만 실행할 수 있다.
 
-```sql
-begin;
-with family as (
-  insert into public.families(name) values ('우리 가족') returning id
-)
-insert into public.family_members(family_id,user_id,display_name,role)
-select id, '상화_계정의_USER_UID'::uuid, '상화', 'owner' from family
-union all
-select id, '하율_계정의_USER_UID'::uuid, '하율', 'editor' from family;
-commit;
-```
+추가 마이그레이션 `supabase/migrations/20261004015432_username_code_signup.sql`은 이미 기존 프로젝트에 적용했다. Auth 트리거가 서버 발급 가입 요청과 코드 상태를 다시 검사하여 계정과 가족 구성원을 함께 저장한다. 직접 Auth 가입이나 `user_metadata` 위조로는 가입할 수 없다. 관리자 SQL 테스트 자료 생성은 별도 신뢰 경로이며 일반 Auth 연결에는 해당 예외를 적용하지 않는다.
 
-가족을 만들면 일반적인 분류와 결제수단만 생성한다. 금액이 있는 가상 거래·계좌는 자동 생성하지 않는다. 로그인 후 설정 메뉴에서 실제 사용할 계좌·카드를 등록한다. 계정이 Supabase에 존재해도 `family_members.active=true`로 승인되지 않으면 API·DB 접근이 차단된다. 구성원을 비활성화하려면 관리자가 `active=false`로 바꾼다. 구성원당 한 가족을 지원한다.
+정상 가입 후 자동 로그인한다. 첫 번째 가족 구성원은 owner, 이후는 editor이며 원장의 귀속(상화·하율·기타)과 작성자 이름은 별도다. 실제 사용할 계좌·카드는 로그인 후 설정 메뉴에서 등록한다.
 
 ## 4. 환경변수
 
@@ -59,8 +49,8 @@ commit;
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable key. 기존 anon key도 지원. secret/service-role 키는 사용하지 않음 |
 | `NEXT_PUBLIC_SITE_URL` | 개발·배포 앱의 정확한 origin. 기본 `http://localhost:3000` |
 | `TEST_DATABASE_URL` | 선택. 운영과 분리한 테스트 프로젝트의 PostgreSQL 접속 URL |
-| `E2E_EMAIL`, `E2E_PASSWORD` | 선택. 별도의 가상 테스트 가족 계정 |
-| `E2E_SECOND_EMAIL`, `E2E_SECOND_PASSWORD` | 선택. 같은 테스트 가족의 두 번째 계정, 동시 수정 검증용 |
+| `E2E_USERNAME`, `E2E_PASSWORD` | 선택. 별도의 가상 테스트 가족 계정 |
+| `E2E_SECOND_USERNAME`, `E2E_SECOND_PASSWORD` | 선택. 같은 테스트 가족의 두 번째 계정, 동시 수정 검증용 |
 | `E2E_ALLOW_WRITES` | 기본 false. 전용 테스트 가족에서만 true |
 
 관리자 secret/service-role 키는 앱에 필요하지 않으며 브라우저 번들에 넣지 않는다. 쓰기 요청은 로그인 쿠키, 요청 origin, 가족 소속, 서버 행 검사, DB RPC/RLS로 검증한다. 다른 호스트로 접속해 쓰기 요청이 거부되면 `NEXT_PUBLIC_SITE_URL`과 실제 접속 주소를 맞추고 서버를 재시작한다.
@@ -92,7 +82,7 @@ npm run test:e2e
 
 `npm test`는 Node 내장 테스트로 외부 패키지 없이 실행한다. DB 테스트는 두 마이그레이션이 적용된 **별도 테스트 DB**, `TEST_DATABASE_URL`, `psql`이 필요하다. 모든 SQL 테스트 자료와 쓰기는 트랜잭션 종료 시 롤백한다. Docker·운영 DB 초기화는 수행하지 않는다. DB URL이나 psql이 없으면 통과로 간주하지 않고 명시적으로 skip한다.
 
-브라우저 쓰기 테스트는 `E2E_EMAIL`, `E2E_PASSWORD`, `E2E_ALLOW_WRITES=true`를 테스트 실행 프로세스의 환경변수로 지정해야 한다. `.env.example`만 작성했다고 테스트 runner에 자동 로드되는 것은 아니다. 앱에는 `NEXT_PUBLIC_*` 설정이 필요하다. 테스트 가족은 현재 월 거래·고정비가 없는 전용 가족이어야 한다. 테스트가 만든 가상 거래는 API로 소프트 삭제한다. 서버 URL은 로컬이며 기존 서버를 재사용한다면 앱 origin도 localhost로 맞춘다. 인증정보·실거래를 테스트 fixture에 작성하지 않는다.
+브라우저 쓰기 테스트는 `E2E_USERNAME`, `E2E_PASSWORD`, `E2E_ALLOW_WRITES=true`를 테스트 실행 프로세스의 환경변수로 지정해야 한다. `.env.example`만 작성했다고 테스트 runner에 자동 로드되는 것은 아니다. 앱에는 `NEXT_PUBLIC_*` 설정이 필요하다. 테스트 가족은 현재 월 거래·고정비가 없는 전용 가족이어야 한다. 테스트가 만든 가상 거래는 API로 소프트 삭제한다. 서버 URL은 로컬이며 기존 서버를 재사용한다면 앱 origin도 localhost로 맞춘다. 인증정보·실거래를 테스트 fixture에 작성하지 않는다.
 
 작업 환경에서 **실제로 실행한 결과**와 검증하지 못한 시나리오는 `docs/STATUS.md`를 참고한다. 배포 전 typecheck/build/DB/브라우저 테스트가 필요하다.
 

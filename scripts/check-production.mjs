@@ -48,11 +48,25 @@ try {
     await page.goto(site, { waitUntil: "domcontentloaded" });
     await page.waitForURL(`${site}/login`, { timeout: 20000 });
     await page.getByRole("heading", { name: "가족 계정으로 로그인" }).waitFor();
-    assert.ok(await page.getByLabel("이메일", { exact: true }).isVisible());
+    assert.ok(await page.getByLabel("아이디", { exact: true }).isVisible());
     assert.ok(await page.getByLabel("비밀번호", { exact: true }).isVisible());
     assert.ok(await page.getByRole("button", { name: "로그인", exact: true }).isVisible());
     assert.deepEqual(errors, []);
-    console.log(`Production ${name} login page verified`);
+    await page.getByRole("link", { name: "회원가입", exact: true }).click();
+    await page.getByRole("heading", { name: "가족 계정 만들기" }).waitFor();
+    assert.ok(await page.getByLabel("회원가입 코드", { exact: true }).isVisible());
+    await page.getByLabel("아이디", { exact: true }).fill("invalid_code_check");
+    await page.getByLabel("이름", { exact: true }).fill("가입 거절 확인");
+    await page.getByLabel("비밀번호", { exact: true }).fill("test-password-123");
+    await page.getByLabel("비밀번호 확인", { exact: true }).fill("mismatched-password");
+    await page.getByLabel("회원가입 코드", { exact: true }).fill("this-is-not-a-valid-code");
+    await page.getByRole("button", { name: "회원가입", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: "비밀번호 확인이 일치하지 않습니다." }).waitFor();
+    await page.getByLabel("비밀번호 확인", { exact: true }).fill("test-password-123");
+    await page.getByRole("button", { name: "회원가입", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: "회원가입 코드가 올바르지 않거나 사용할 수 없습니다." }).waitFor({ timeout: 20000 });
+    assert.deepEqual(errors, []);
+    console.log(`Production ${name} login, signup and invalid-code rejection verified`);
     await context.close();
   }
 } finally {
