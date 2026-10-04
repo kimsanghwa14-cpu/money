@@ -12,7 +12,7 @@ async function mockApp(page:Page,request:APIRequestContext,large=false) {
   const store={rows:[record(1,"2026-10-20","경계 이전",10),record(2,"2026-10-21","가상 급여",500,"income"),record(3,"2026-11-05","다음 달 소비",100),record(4,"2026-11-20","종료일 소비",50),record(5,"2026-11-21","다음 주기",40),record(6,"2027-01-20","연말 주기",20)],requests:[] as string[]};
   if(large)store.rows=Array.from({length:405},(_,i)=>record(i+1,"2026-10-22",`가상 거래 ${i+1}`,i+1));
   await page.route("**/*.supabase.co/**",route=>route.abort());
-  // Every request under this host is intercepted; no production API or personal account is used.
+  // Every request under this host is intercepted; production accounts are not used.
   await page.route(`${origin}/**`,async route=>{
     const url=new URL(route.request().url());
     if(url.pathname==="/api/session")return route.fulfill({json:{configured:true}});
@@ -64,13 +64,14 @@ test("default payroll, cross-month grid, all-history and custom range preserve d
   expect(errors).toEqual([]);
 });
 test("unsaved edits survive a dismissed period change and cross-month saves remain single records",async({page,request})=>{
-  const store=await mockApp(page,request);
+  const store=await mockApp(page,request), salaryId=store.rows[1].id;
   await page.getByLabel("조회 연월",{exact:true}).fill("2026-10");
   await page.getByRole("navigation").getByRole("button",{name:"상화 가계부"}).click();
-  await page.getByRole("textbox",{name:"1행 날짜",exact:true}).fill("2026-11-21");
+  const salaryDate=page.locator(`input[data-id="${salaryId}"][data-col="0"]`);
+  await salaryDate.fill("2026-11-21");
   page.once("dialog",dialog=>dialog.dismiss());await page.getByRole("button",{name:"전체 내역",exact:true}).click();
   await expect(page.getByRole("button",{name:"급여주기",exact:true})).toHaveAttribute("aria-pressed","true");
-  await expect(page.getByRole("textbox",{name:"1행 날짜",exact:true})).toHaveValue("2026-11-21");
+  await expect(salaryDate).toHaveValue("2026-11-21");
   await page.getByRole("button",{name:"변경사항 저장",exact:true}).click();
   await expect(page.getByRole("button",{name:"변경사항 저장",exact:true})).toBeDisabled();
   await page.getByRole("button",{name:"전체 내역",exact:true}).click();
