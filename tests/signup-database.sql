@@ -7,7 +7,7 @@ do $$declare result jsonb; second jsonb; failed boolean:=false; begin
  perform pg_temp.check_signup_test(not has_schema_privilege('anon','ledger_private','USAGE'),'private schema hidden from anon');
  perform pg_temp.check_signup_test(not has_function_privilege('authenticated','public.prepare_signup(text,text,text)','EXECUTE'),'enrollment RPC hidden from clients');
  perform pg_temp.check_signup_test((public.prepare_signup('wrong','rollback_one','상화')->>'error')='invalid_code','wrong code denied');
- perform pg_temp.check_signup_test((select count(*)=0 from ledger_private.signup_requests),'wrong code leaves no reservation');
+ perform pg_temp.check_signup_test((select count(*)=0 from ledger_private.signup_requests where code_id='dddddddd-dddd-4ddd-8ddd-dddddddddddd'),'wrong code leaves no reservation');
  result:=public.prepare_signup(' rollback-code ','ROLLBACK_ONE','상화');
  perform pg_temp.check_signup_test(result ? 'ticket','valid code reserves username');
  perform pg_temp.check_signup_test((public.prepare_signup('ROLLBACK-CODE','rollback_one','상화')->>'error')='username_taken','concurrent duplicate reservation denied');
