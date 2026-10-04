@@ -53,7 +53,7 @@ function App() {
   if (isLogin) return <LoginPage />;
   if (isSignup) return <SignupPage />;
   if (state.error) return <Failure message={state.error} />;
-  if (!state.ready) return <main className="setup-page"><section className="setup-card"><h1>우리의 가계부</h1><p role="status">가족 계정을 확인하는 중입니다…</p></section></main>;
+  if (!state.ready) return <main className="setup-page"><section className="setup-card"><h1>리온이네 가계부</h1><p role="status">가족 계정을 확인하는 중입니다…</p></section></main>;
   return <LedgerApp initialMonth={koreaDate().slice(0, 7)} />;
 }
 
