@@ -18,7 +18,9 @@ export async function verifyDashboardAndRecurring(page, original, ledgerPath) {
     { kind: 'income', amount: '5,000', status: 'planned' },
   ].map((value, index) => ({ ...blankRow('상화', month, initial.categories), description: '화면검증-' + index, ...value, category_id: value.kind === 'refund' ? original.category_id : category(value.kind) }));
   const write = async (path, data) => {
-    const reply = await page.request.post(path, { headers: { origin }, data: { request_id: randomUUID(), ...data } });
+    let reply;
+    try { reply = await page.request.post(path, { headers: { origin }, data: { request_id: randomUUID(), ...data } }); }
+    catch { throw new Error('Fixture request failed at ' + path + '; request cookies are omitted.'); }
     assert.equal(reply.status(), 200, 'Fixture write must succeed: ' + await reply.text());
     return reply.json();
   };
@@ -83,7 +85,6 @@ export async function verifyDashboardAndRecurring(page, original, ledgerPath) {
     console.log('Dashboard accounting, refund and status handling, budget warning, disclosure controls, annual comparison, recurring highlighting and copy behavior passed at ' + width + 'px');
   }
   assert.deepEqual(errors, [], 'No browser errors');
-  for (const rule of rules) await write('/api/recurring', { rule: { ...rule, enabled: false } });
   const latest = await (await page.request.get(ledgerPath)).json();
   await write('/api/transactions', { upserts: [], deletes: latest.transactions.filter(t => t.id !== original.id).map(t => ({ id: t.id, version: t.version })) });
   await write('/api/budgets', { budgets: latest.budgets.map(b => ({ ...b, amount: '0' })) });
