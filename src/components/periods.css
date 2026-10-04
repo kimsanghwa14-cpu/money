@@ -1,0 +1,7 @@
+.period-controls{margin-top:16px}
+.period-controls .segmented[aria-label="조회 방식"]{flex-wrap:wrap;max-width:100%;min-width:0}
+.period-controls .segmented[aria-label="조회 방식"] button{flex:1 0 auto}
+.period-controls label{display:flex;align-items:center;gap:6px;max-width:100%;flex-wrap:wrap}
+.period-controls [data-testid="period-label"]{overflow-wrap:anywhere;font-size:.9375rem;margin-bottom:8px}
+.period-controls>.muted{font-size:.8125rem;margin-bottom:0}
+@media(max-width:640px){.period-controls .segmented[aria-label="조회 방식"]{width:100%}.period-controls .segmented[aria-label="조회 방식"] button{font-size:.8125rem;padding:7px 9px}.period-controls [data-testid="period-label"]{font-size:.875rem}}
