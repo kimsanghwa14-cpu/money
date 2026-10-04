@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { OWNERS, KINDS, summarize, budgetSummary, money, sumSafe, type LedgerData, type Owner } from "@/lib/domain";
 import BudgetEditor from "./BudgetEditor";
+import FinancialStatus from "./FinancialStatus";
 export default function Dashboard({ data, month, onDirty, onSaved, onTransactions, annual, setAnnual }: { data: LedgerData; month: string; onDirty: (scope: string, dirty: boolean) => void; onSaved: () => Promise<void>; onTransactions: (owner?: Owner, filter?: string) => void; annual: boolean; setAnnual: (value: boolean) => void }) {
   const [perspective, setPerspective] = useState<"allocation" | "consumption">("allocation");
   const total = summarize(data.transactions), planned = budgetSummary(data.budgets, data.categories);
@@ -20,6 +21,7 @@ export default function Dashboard({ data, month, onDirty, onSaved, onTransaction
   const expenseRows=categoryRows.filter(c=>c.kind==="expense"&&c.actual>0), highest=Math.max(1,...expenseRows.map(c=>c.actual));
   return <>
     <div className="metric-grid">{amounts.map((m,i)=><button className={`metric ${i===3?"accent-metric":""}`} key={m.title} onClick={()=>onTransactions(undefined,m.filter)}><span>{m.title}</span><strong>{money(m.value)}</strong><small>{m.sub}</small></button>)}</div>
+    <FinancialStatus familyId={data.family.id}/>
     <div className="view-toolbar"><div className="segmented"><button aria-pressed={!annual} className={!annual?"active":""} onClick={()=>setAnnual(false)}>월간</button><button aria-pressed={annual} className={annual?"active":""} onClick={()=>setAnnual(true)}>연간</button></div><div className="segmented"><button aria-pressed={perspective==="consumption"} className={perspective==="consumption"?"active":""} onClick={()=>setPerspective("consumption")}>소비 관점</button><button aria-pressed={perspective==="allocation"} className={perspective==="allocation"?"active":""} onClick={()=>setPerspective("allocation")}>자금배분 관점</button></div><span className="muted">{perspective==="consumption"?`수입 − 소비 = ${money(total.consumptionRemaining)}`:`수입 − 소비 − 저축·투자·원금상환 = ${money(total.remaining)}`}</span></div>
     {annual?<section className="panel"><div className="section-heading"><div><h2>{month.slice(0,4)}년 월별 비교</h2><p>계획과 실제 모두 소비·저축·투자·원금상환을 포함합니다. 내부이체·카드정산·대출금 수령은 제외합니다.</p></div></div>{!data.annual_transactions?<p role="status">연간 자료를 불러오는 중…</p>:<div className="table-scroll"><table className="report-table"><thead><tr>{["월","계획수입","계획지출·배분","계획여유자금","실제수입","실제지출·배분","실제여유자금","계획 메모"].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{Array.from({length:12},(_,i)=>{
       const m=`${month.slice(0,4)}-${String(i+1).padStart(2,"0")}`, bs=(data.annual_budgets??[]).filter(b=>b.month===m), plan=budgetSummary(bs,data.categories), actual=summarize(data.annual_transactions!.filter(t=>t.date.startsWith(m)));
