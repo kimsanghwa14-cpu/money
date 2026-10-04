@@ -1,0 +1,18 @@
+name: Prepare signup migration
+on:
+  push:
+    branches: [codex/invite-signup]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+      - run: npx --yes supabase --version
+      - run: npx --yes supabase migration --help
+      - run: npx --yes supabase migration new --help
+      - run: npx --yes supabase migration new username_code_signup
