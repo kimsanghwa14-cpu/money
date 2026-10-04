@@ -17,7 +17,7 @@ interface PagesContext {
 export async function onRequest({ request, env, next }: PagesContext): Promise<Response> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/") && url.pathname !== "/auth/callback") return next();
-  const cookies = new Map(parseCookieHeader(request.headers.get("Cookie") ?? "").map(c => [c.name, c.value]));
+  const cookies = new Map<string, string>(parseCookieHeader(request.headers.get("Cookie") ?? "").map(c => [c.name, c.value ?? ""]));
   const outgoingCookies: string[] = [];
   let client: ReturnType<typeof createServerClient> | undefined;
   const runtime: ServerRuntime = {

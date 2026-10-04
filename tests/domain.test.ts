@@ -69,7 +69,7 @@ test("CSV 내보내기는 한글 BOM과 수식 실행 방지를 제공한다",()
  const csv=exportCsv([transaction({description:"=HYPERLINK(가상)"})],categories,[],[]);assert.ok(csv.startsWith("\ufeff"));assert.ok(csv.includes("'=HYPERLINK"));assert.ok(csv.includes('"1000"'));
 });
 test("중복 후보는 계좌·내용·유형을 포함하고 날짜·금액만으로 삭제하지 않는다",()=>{
- const a=transaction(),b=transaction({description:"다른 가상 거래"});assert.notEqual(duplicateKey(a),duplicateKey(b));assert.equal(duplicateKey(a),duplicateKey({...a,id:crypto.randomUUID()}));
+ const a=transaction(),b=transaction({description:"다른 가상 거래"});assert.notEqual(duplicateKey(a),duplicateKey(b));const same=transaction({...a,id:crypto.randomUUID()});assert.equal(duplicateKey(a),duplicateKey(same));
 });
 test("표 붙여넣기는 열 초과를 조용히 잘라내지 않는다",()=>{
  assert.throws(()=>pasteRows([],"1\t2\t3",0,0,["date"],"상화","2026-10",categories,[],[]));
