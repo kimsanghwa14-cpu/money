@@ -1,6 +1,6 @@
 # 설치와 가족 DB 연결
 
-현재 저장소는 Next.js App Router + TypeScript + Tailwind CSS + Supabase Auth/PostgreSQL 구성이다. 기존 `README.md`와 `index.html`은 보존했다. 기존 엑셀·이미지·실제 거래 데이터는 제공되지 않았다. 운영 데이터나 인증정보를 생성·추정하지 않았다.
+현재 저장소는 Next.js App Router + TypeScript + Tailwind CSS + Supabase Auth/PostgreSQL 구성이다. Cloudflare Pages 빌드는 기존 React 화면과 Pages Functions를 사용한다. 배포 설정은 `docs/CLOUDFLARE.md`를 참고한다. 기존 엑셀·이미지·실제 거래 데이터는 제공되지 않았다. 운영 데이터나 인증정보를 생성·추정하지 않았다.
 
 ## 1. 로컬 실행
 
@@ -84,7 +84,7 @@ commit;
 ```bash
 npm test
 npm run typecheck
-npm run build
+npm run build:next
 npm run test:db
 npx playwright install chromium
 npm run test:e2e

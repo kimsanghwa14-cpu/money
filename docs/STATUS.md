@@ -65,3 +65,12 @@
 ## 외부 설정 및 배포
 
 Supabase 프로젝트 생성·SQL 마이그레이션·가족 계정 승인·환경변수 설정은 사용자가 접근 가능한 환경에서 해야 한다. 비밀번호·secret 키를 채팅으로 보낼 필요가 없다. 개발 환경에서 설치와 typecheck/build/DB/브라우저 테스트를 완료해야 배포 준비가 검증된다. GitHub 연결, 커밋, push, Vercel 배포는 수행하지 않았다.
+
+## 2026-10-04 Cloudflare Pages 대응
+
+- `npm run build`를 Vite 화면 빌드로 변경했다. Next.js 빌드는 `npm run build:next`이다.
+- 실제 HTML 진입점, 기존 React 화면의 Pages 진입점, `/api/session`, Pages Functions 라우팅, 인증 쿠키 갱신·콜백 및 캐시 방지를 추가했다.
+- API의 가족 인증·입력·origin·RPC 검증을 Next.js와 Pages가 공유하도록 분리했다.
+- 기존 도메인 테스트 17개와 Pages API 테스트 8개가 이 환경에서 통과했다.
+- npm 설치는 레지스트리 DNS 실패(`EAI_AGAIN`)로 실행하지 못했다. 따라서 로컬 typecheck·Vite 빌드·Functions 번들·브라우저 검증을 통과했다고 주장하지 않는다. `.github/workflows/cloudflare-check.yml`에서 해당 검증을 자동 실행하도록 구성했다.
+- 실제 Supabase 계정과 운영 DB를 사용한 로그인·저장 검증은 수행하지 않았다. Cloudflare 설정과 재배포 절차는 `docs/CLOUDFLARE.md`에 있다.

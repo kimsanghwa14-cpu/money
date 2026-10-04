@@ -1,11 +1,13 @@
-import "server-only";
-import { serverClient } from "./supabase/server";
-import { configured } from "./supabase/config";
-import { NextResponse } from "next/server";
+import type { createServerClient } from "@supabase/ssr";
+export interface ServerRuntime {
+  configured: boolean;
+  siteUrl?: string;
+  client: () => Promise<ReturnType<typeof createServerClient>>;
+}
 export class ApiError extends Error { status: number; constructor(message: string, status = 400) { super(message); this.status = status; } }
-export async function context() {
-  if (!configured()) throw new ApiError("DB 미연결: Supabase 환경변수를 설정하세요.", 503);
-  const db = await serverClient();
+export async function context(runtime: ServerRuntime) {
+  if (!runtime.configured) throw new ApiError("DB 미연결: Supabase 환경변수를 설정하세요.", 503);
+  const db = await runtime.client();
   const { data, error } = await db.auth.getUser();
   if (error && error.name !== "AuthSessionMissingError" && (!error.status || error.status >= 500)) throw new ApiError("인증 서버에 연결하지 못했습니다. 네트워크와 Supabase 주소를 확인하세요.", 503);
   if (error || !data.user) throw new ApiError("로그인이 필요하거나 인증 서버에 연결하지 못했습니다.", 401);
@@ -14,9 +16,9 @@ export async function context() {
   if (!memberResult.data) throw new ApiError("승인된 가족 구성원만 접근할 수 있습니다.", 403);
   return { db, member: memberResult.data, familyId: memberResult.data.family_id as string };
 }
-export function checkWriteOrigin(request: Request) {
+export function checkWriteOrigin(request: Request, runtime: ServerRuntime) {
   const origin = request.headers.get("origin");
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  const siteUrl = runtime.siteUrl;
   const allowed = siteUrl ? new URL(siteUrl).origin : new URL(request.url).origin;
   if (!origin || origin !== allowed) throw new ApiError("허용되지 않은 요청 출처입니다.", 403);
   if (!request.headers.get("content-type")?.includes("application/json")) throw new ApiError("JSON 요청이 필요합니다.", 415);
@@ -29,7 +31,7 @@ export async function jsonBody(request: Request): Promise<Record<string, unknown
   return result as Record<string, unknown>;
 }
 export function fail(error: unknown) {
-  return NextResponse.json({ error: error instanceof Error ? error.message : "요청을 처리하지 못했습니다." }, { status: error instanceof ApiError ? error.status : 500, headers: { "Cache-Control": "no-store" } });
+  return Response.json({ error: error instanceof Error ? error.message : "요청을 처리하지 못했습니다." }, { status: error instanceof ApiError ? error.status : 500, headers: { "Cache-Control": "no-store" } });
 }
 export function dbFailure(error: { code?: string; message: string }): never {
   if (error.code === "40001" || error.code === "23505") throw new ApiError(error.code === "23505" ? "이미 저장된 거래 ID·원본 ID 또는 같은 이름의 설정이 있습니다. 중복 내역을 확인하세요." : error.message, 409);

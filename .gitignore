@@ -8,3 +8,7 @@ test-results/
 .vercel/
 backups/
 uploads/
+dist/
+.wrangler/
+.dev.vars*
+!.dev.vars.example
