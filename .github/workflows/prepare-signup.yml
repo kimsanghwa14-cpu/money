@@ -15,4 +15,4 @@ jobs:
       - run: npx --yes supabase --version
       - run: npx --yes supabase migration --help
       - run: npx --yes supabase migration new --help
-      - run: npx --yes supabase migration new username_code_signup
+      - run: npx --yes supabase migration new bind_signup_user_id
