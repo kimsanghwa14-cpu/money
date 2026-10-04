@@ -85,8 +85,8 @@ export default function AssetsEditor({ data, onDirty }: { data: LedgerData; onDi
       <section className="panel"><div className="section-heading"><h2>{form.version ? "자산·대출 수정" : "자산·대출 등록"}</h2>{form.version ? <span className="badge">수정 중</span> : null}</div>
         <form onSubmit={save}><fieldset className="form-grid" disabled={saving}>
           <label>항목명<input id="asset-name" required maxLength={120} value={form.name} onChange={event => update({ name: event.target.value })} placeholder="예: 생활비 통장, 주택대출" /></label>
-          <label>자산 종류<select value={form.kind} onChange={event => update({ kind: event.target.value as AssetKind })}>{Object.entries(ASSET_KINDS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label>귀속<select value={form.owner} onChange={event => update({ owner: event.target.value as Owner })}>{OWNERS.map(owner => <option key={owner}>{owner}</option>)}</select></label>
+          <label>자산 종류<select aria-label="자산 종류" value={form.kind} onChange={event => update({ kind: event.target.value as AssetKind })}>{Object.entries(ASSET_KINDS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label>귀속<select aria-label="귀속" value={form.owner} onChange={event => update({ owner: event.target.value as Owner })}>{OWNERS.map(owner => <option key={owner}>{owner}</option>)}</select></label>
           <label>잔액 (원)<input required inputMode="numeric" value={form.balance} onChange={event => update({ balance: event.target.value })} placeholder="0" /></label>
           <label>기준일<input required type="date" min="1900-01-01" max="9999-12-31" value={form.basis_date} onChange={event => update({ basis_date: event.target.value })} /></label>
           <label className="asset-memo">메모<input maxLength={500} value={form.memo} onChange={event => update({ memo: event.target.value })} /></label>
