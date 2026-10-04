@@ -31,3 +31,11 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: node scripts/check-signup-production.mjs
         timeout-minutes: 5
+
+      - name: Save dashboard and recurring-row screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-visual-check
+          path: artifacts/*.png
+          if-no-files-found: ignore
