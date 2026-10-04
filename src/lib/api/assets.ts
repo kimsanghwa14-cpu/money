@@ -1,3 +1,4 @@
+import { redactModificationDates } from "../permissions.ts";
 import type { ServerRuntime } from "../server.ts";
 import { ApiError, checkWriteOrigin, context, dbFailure, fail, jsonBody } from "../server.ts";
 import { UUID } from "../domain.ts";
@@ -6,12 +7,12 @@ import { parseAssetSnapshot, type AssetSnapshot } from "../asset-snapshot.ts";
 
 export async function GET(request: Request, runtime: ServerRuntime) {
   try {
-    const { db, familyId } = await context(runtime);
-    const result = await db.from("assets").select("id,name,owner,kind,basis_date,balance,memo,version,accounting,created_at,updated_at,updated_by", { count: "exact" })
+    const { db, familyId, canViewModificationDates } = await context(runtime);
+    const result = await db.from("assets_visible").select("id,name,owner,kind,basis_date,balance,memo,version,accounting,created_at,updated_at,updated_by", { count: "exact" })
       .eq("family_id", familyId).is("deleted_at", null).order("kind").order("name").order("id").limit(1000);
     if (result.error) throw new ApiError("자산·대출 내역을 조회하지 못했습니다. 잠시 후 다시 시도하세요.", 503);
     if (result.count === null || result.count > 1000 || result.data?.length !== result.count) throw new ApiError("자산·대출 내역을 모두 조회하지 못했습니다. 조회 한도는 1,000개입니다.", 503);
-    if (new URL(request.url).searchParams.get("include_snapshot") !== "1") return Response.json({ assets: result.data }, { headers: { "Cache-Control": "private, no-store" } });
+    if (new URL(request.url).searchParams.get("include_snapshot") !== "1") return Response.json(redactModificationDates({ assets: result.data }, canViewModificationDates), { headers: { "Cache-Control": "private, no-store" } });
     // Return only the validated display snapshot, never the complete import payload.
     const imported = await db.from("import_batches").select("snapshot:payload->asset_snapshot")
       .eq("family_id", familyId).eq("source", "chatgpt:asset_snapshot").eq("status", "committed")
@@ -22,7 +23,7 @@ export async function GET(request: Request, runtime: ServerRuntime) {
       try { asset_snapshot = parseAssetSnapshot(imported.data.snapshot); }
       catch { throw new ApiError("가져온 자금계획의 형식이나 금액을 확인하지 못했습니다.", 503); }
     }
-    return Response.json({ assets: result.data, asset_snapshot }, { headers: { "Cache-Control": "private, no-store" } });
+    return Response.json(redactModificationDates({ assets: result.data, asset_snapshot }, canViewModificationDates), { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return fail(error); }
 }
 export async function POST(request: Request, runtime: ServerRuntime) {

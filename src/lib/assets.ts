@@ -5,7 +5,7 @@ export type AssetKind = keyof typeof ASSET_KINDS;
 export type Asset = {
   id: string; name: string; owner: Owner; kind: AssetKind; basis_date: string;
   balance: number; memo: string; version: number; accounting: "manual" | "ledger";
-  created_at: string; updated_at: string; updated_by: string;
+  created_at: string; updated_at?: string; updated_by: string;
 };
 export type AssetForm = Pick<Asset, "id" | "name" | "owner" | "kind" | "basis_date" | "memo" | "version"> & { balance: string };
 export function normalizeAsset(value: unknown) {

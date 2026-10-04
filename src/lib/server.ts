@@ -1,3 +1,4 @@
+import { modificationDateAccess } from "./permissions.ts";
 import type { createServerClient } from "@supabase/ssr";
 export interface ServerRuntime {
   configured: boolean;
@@ -11,10 +12,10 @@ export async function context(runtime: ServerRuntime) {
   const { data, error } = await db.auth.getUser();
   if (error && error.name !== "AuthSessionMissingError" && (!error.status || error.status >= 500)) throw new ApiError("인증 서버에 연결하지 못했습니다. 네트워크와 Supabase 주소를 확인하세요.", 503);
   if (error || !data.user) throw new ApiError("로그인이 필요하거나 인증 서버에 연결하지 못했습니다.", 401);
-  const memberResult = await db.from("family_members").select("family_id,user_id,display_name,role").eq("user_id", data.user.id).eq("active", true).maybeSingle();
+  const memberResult = await db.from("family_members").select("family_id,user_id,display_name,role,can_view_modification_dates").eq("user_id", data.user.id).eq("active", true).maybeSingle();
   if (memberResult.error) throw new ApiError("가족 정보를 조회하지 못했습니다. DB 마이그레이션과 연결을 확인하세요.", 503);
   if (!memberResult.data) throw new ApiError("승인된 가족 구성원만 접근할 수 있습니다.", 403);
-  return { db, member: memberResult.data, familyId: memberResult.data.family_id as string };
+  return { db, canViewModificationDates: modificationDateAccess(memberResult.data), member: memberResult.data, familyId: memberResult.data.family_id as string };
 }
 export function checkWriteOrigin(request: Request, runtime: ServerRuntime) {
   const origin = request.headers.get("origin");

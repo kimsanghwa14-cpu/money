@@ -27,6 +27,7 @@ export type RecurringRule = {
   interval_months: number; day: number; start_month: string; end_month: string | null; enabled: boolean;
 };
 export type LedgerData = {
+  permissions?: { view_modification_dates: boolean };
   family: { id: string; name: string }; member: { user_id: string; display_name: string; role: string };
   members?: { user_id: string; display_name: string }[];
   transactions: Transaction[]; categories: Category[]; accounts: Account[]; methods: Named[];

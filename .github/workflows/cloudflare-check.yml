@@ -17,6 +17,7 @@ jobs:
       - run: npm test
       - run: npm run test:signup
       - run: npm run test:assets
+      - run: node tests/permissions.test.ts
       - run: npm run test:pages
       - run: npm run typecheck
       - run: npm run build

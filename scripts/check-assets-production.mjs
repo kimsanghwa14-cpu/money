@@ -4,6 +4,8 @@ import { expect } from '@playwright/test';
 import { koreaDate, koreaDateTime } from '../src/lib/domain.ts';
 
 export async function verifyAssetsAndModification(page, tx, ledgerPath) {
+  const canViewDates = (await (await page.request.get(ledgerPath)).json()).permissions?.view_modification_dates === true;
+  const expectDate = async (locator, value) => { if (canViewDates) await expect(locator).toHaveText(koreaDateTime(value)); else await expect(locator).toHaveCount(0); };
   const nav = page.getByRole('navigation', { name: '가계부 메뉴' });
   const openAssets = async () => {
     await nav.getByRole('button').filter({ hasText: '자산·대출' }).click();
@@ -47,7 +49,8 @@ export async function verifyAssetsAndModification(page, tx, ledgerPath) {
   const snapshot = await (await page.request.get('/api/assets')).json();
   const current = snapshot.assets.find(a => a.name === deposit);
   assert.equal(current.version, 2); assert.equal(current.balance, 1200000);
-  await expect(page.locator(`[data-asset-id="${current.id}"] time`)).toHaveText(koreaDateTime(current.updated_at));
+  await expectDate(page.locator(`[data-asset-id="${current.id}"] time`), current.updated_at);
+  if (!canViewDates) assert.equal("updated_at" in current, false, "Asset API must omit private modification dates");
   const conflict = await page.request.post('/api/assets', { headers: { origin: new URL(page.url()).origin }, data: { request_id: randomUUID(), upserts: [{ ...current, version: 1, balance: '1' }], deletes: [] } });
   assert.equal(conflict.status(), 409, 'Stale asset updates must not overwrite the latest balance');
   for (const name of [deposit, loan]) {
@@ -58,11 +61,11 @@ export async function verifyAssetsAndModification(page, tx, ledgerPath) {
     await expect(page.getByRole('row').filter({ hasText: name })).toHaveCount(0);
   }
   await expect(page.getByTestId('net-assets')).toHaveText('0원');
-  console.log('Mobile asset editing, persisted modification dates, conflict protection and deletion passed');
+  console.log('Mobile asset editing, modification-date privacy, conflict protection and deletion passed');
   await page.setViewportSize({ width: 1440, height: 900 });
   await nav.getByRole('button').filter({ hasText: '상화 가계부' }).click();
   const stamp = page.locator(`[data-testid="transaction-updated-at"][data-transaction-id="${tx.id}"]`);
-  await expect(stamp).toHaveText(koreaDateTime(tx.updated_at));
+  await expectDate(stamp, tx.updated_at);
   await page.getByLabel('1행 내용', { exact: true }).fill(`${tx.description} 수정`);
   const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/transactions' && r.request().method() === 'POST');
   await page.getByRole('button', { name: '변경사항 저장', exact: true }).click();
@@ -70,11 +73,12 @@ export async function verifyAssetsAndModification(page, tx, ledgerPath) {
   await page.getByRole('status').filter({ hasText: '변경사항을 DB에 저장했습니다.' }).waitFor();
   const updated = (await (await page.request.get(ledgerPath)).json()).transactions.find(t => t.id === tx.id);
   assert.equal(updated.version, tx.version + 1);
-  assert.ok(new Date(updated.updated_at) > new Date(tx.updated_at));
-  await expect(stamp).toHaveText(koreaDateTime(updated.updated_at));
+  if (canViewDates) assert.ok(new Date(updated.updated_at) > new Date(tx.updated_at));
+  else { assert.equal("updated_at" in updated, false); const compare = await (await page.request.get(`${ledgerPath}&ids=${tx.id}`)).json(); assert.equal("updated_at" in compare.transactions[0], false); }
+  await expectDate(stamp, updated.updated_at);
   await page.reload();
   await nav.getByRole('button').filter({ hasText: '상화 가계부' }).click();
-  await expect(stamp).toHaveText(koreaDateTime(updated.updated_at));
-  console.log('Ledger modification date updates immediately after save and persists after reload');
+  await expectDate(stamp, updated.updated_at);
+  console.log('Ledger edits and modification-date access persist after reload');
   return updated;
 }

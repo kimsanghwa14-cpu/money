@@ -15,6 +15,7 @@ async function readAssets(signal?: AbortSignal): Promise<Asset[]> {
   return result.assets;
 }
 export default function AssetsEditor({ data, onDirty }: { data: LedgerData; onDirty: (scope: string, dirty: boolean) => void }) {
+  const canViewModificationDates = data.permissions?.view_modification_dates === true;
   const [rows, setRows] = useState<Asset[] | null>(null);
   const [form, setForm] = useState<AssetForm>(emptyForm);
   const [baseline, setBaseline] = useState(() => JSON.stringify(form));
@@ -94,8 +95,8 @@ export default function AssetsEditor({ data, onDirty }: { data: LedgerData; onDi
         </fieldset></form>
       </section>
       <section className="panel"><div className="section-heading"><h2>등록 내역</h2><span className="badge">{visible?.length ?? 0}개</span></div>
-        {visible?.length ? <div className="table-scroll"><table className="asset-table"><thead><tr><th>항목명</th><th>종류</th><th>귀속</th><th className="numeric">잔액</th><th>기준일</th><th>수정일 (한국시간)</th><th>관리</th></tr></thead><tbody>
-          {visible.map(asset => <tr key={asset.id} data-asset-id={asset.id}><th scope="row">{asset.name}{asset.memo ? <small className="asset-row-memo">{asset.memo}</small> : null}</th><td>{ASSET_KINDS[asset.kind]}</td><td>{asset.owner}</td><td className="numeric">{money(asset.balance)}</td><td>{asset.basis_date}</td><td><time dateTime={asset.updated_at}>{koreaDateTime(asset.updated_at)}</time></td><td className="asset-actions"><button aria-label={`${asset.name} 수정`} onClick={() => edit(asset)} disabled={saving || asset.accounting !== "manual"}>수정</button><button aria-label={`${asset.name} 삭제`} onClick={() => remove(asset)} disabled={saving || dirty}>삭제</button></td></tr>)}
+        {visible?.length ? <div className="table-scroll"><table className="asset-table"><thead><tr><th>항목명</th><th>종류</th><th>귀속</th><th className="numeric">잔액</th><th>기준일</th>{canViewModificationDates ? <th>수정일 (한국시간)</th> : null}<th>관리</th></tr></thead><tbody>
+          {visible.map(asset => <tr key={asset.id} data-asset-id={asset.id}><th scope="row">{asset.name}{asset.memo ? <small className="asset-row-memo">{asset.memo}</small> : null}</th><td>{ASSET_KINDS[asset.kind]}</td><td>{asset.owner}</td><td className="numeric">{money(asset.balance)}</td><td>{asset.basis_date}</td>{canViewModificationDates ? <td><time dateTime={asset.updated_at}>{koreaDateTime(asset.updated_at)}</time></td> : null}<td className="asset-actions"><button aria-label={`${asset.name} 수정`} onClick={() => edit(asset)} disabled={saving || asset.accounting !== "manual"}>수정</button><button aria-label={`${asset.name} 삭제`} onClick={() => remove(asset)} disabled={saving || dirty}>삭제</button></td></tr>)}
         </tbody></table></div> : <p className="empty">{scope ? "이 귀속에 등록된 항목이 없습니다." : "등록한 자산·대출이 없습니다. 첫 잔액을 등록해 주세요."}</p>}
       </section>
     </> : null}

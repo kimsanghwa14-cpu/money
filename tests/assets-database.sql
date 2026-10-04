@@ -7,6 +7,7 @@ insert into public.families(id,name) values('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee
 insert into public.family_members(family_id,user_id,display_name,role) values
  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','66666666-6666-4666-8666-666666666666','자산 테스트','owner'),
  ('ffffffff-ffff-4fff-8fff-ffffffffffff','77777777-7777-4777-8777-777777777777','외부 테스트','owner');
+update public.family_members set can_view_modification_dates=true where user_id='66666666-6666-4666-8666-666666666666';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','66666666-6666-4666-8666-666666666666',true);
 do $$declare f uuid:='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'; request uuid:=gen_random_uuid(); payload jsonb; deposit jsonb; loan jsonb; saved jsonb; denied boolean; begin
@@ -19,7 +20,7 @@ do $$declare f uuid:='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'; request uuid:=gen_r
  perform pg_temp.asset_check((select sum(balance) filter(where kind<>'loan')-sum(balance) filter(where kind='loan')=600000 from public.assets where family_id=f),'asset minus loan net balance');
  deposit:=deposit||jsonb_build_object('version',1,'balance',1200000);
  perform public.save_assets(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(deposit),'deletes','[]'::jsonb));
- perform pg_temp.asset_check((select version=2 and balance=1200000 and updated_at>created_at and updated_by='66666666-6666-4666-8666-666666666666' from public.assets where id=(deposit->>'id')::uuid),'edit advances version and server modification time');
+ perform pg_temp.asset_check((select version=2 and balance=1200000 and updated_at>created_at and updated_by='66666666-6666-4666-8666-666666666666' from public.assets_visible where id=(deposit->>'id')::uuid),'edit advances version and server modification time');
  denied:=false;begin perform public.save_assets(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(deposit),'deletes','[]'::jsonb));exception when sqlstate 'PT409' then denied:=true;end;
  perform pg_temp.asset_check(denied,'stale edit rejected');
  denied:=false;begin perform public.save_assets(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(deposit||jsonb_build_object('version',2,'balance',1),loan||jsonb_build_object('version',1,'balance',-1)),'deletes','[]'::jsonb));exception when others then denied:=true;end;
