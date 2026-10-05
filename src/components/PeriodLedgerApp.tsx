@@ -68,7 +68,7 @@ export default function PeriodLedgerApp({ initialMonth }: { initialMonth: string
           {tab === "상화" || tab === "하율" ? <PayrollSummary key={tab} data={data} owner={tab} selectedMonth={selection.month} /> : null}
           {personal?<div className="compact-summary"><span>확정 수입 <strong>{money(personal.income)}</strong></span><span>소비지출 <strong>{money(personal.expense)}</strong></span><span>저축·투자·상환 <strong>{money(personal.allocation)}</strong></span><span>계산상 여유자금 <strong>{money(personal.remaining)}</strong></span></div>:null}
           {tab==="transactions"?<div className="view-toolbar"><span>귀속</span>{[undefined,"상화","하율","기타"].map(target=><button key={target??"전체"} className={owner===target?"primary":""} onClick={()=>{if(permissionToLeave()){setOwner(target as Owner|undefined);setScopes({});setGridKey(n=>n+1);}}}>{target??"전체"}</button>)}</div>:null}
-          <Spreadsheet key={`${queryUrl}-${tab}-${gridKey}`} data={data} month={selection.month} owner={transactionOwner} initialFilter={filter} defaultDate={entryDate(period)} exportLabel={periodFileLabel(period)} onDirty={onDirty} onSaved={refresh}/>
+          <Spreadsheet key={`${queryUrl}-${tab}-${gridKey}`} data={data} month={selection.month} owner={transactionOwner} personalPeriod={tab === "상화" || tab === "하율" ? selection.mode === "payroll" ? "payroll" : "calendar" : undefined} initialFilter={filter} defaultDate={entryDate(period)} exportLabel={periodFileLabel(period)} onDirty={onDirty} onSaved={refresh}/>
         </>:null}
         {tab==="recurring"?<RecurringEditor key={managementMonth} data={data} month={managementMonth} onSaved={refresh} onDirty={onDirty}/>:null}
         {tab==="assets"?<AssetsEditor key={data.family.id} data={data} onDirty={onDirty}/>:null}

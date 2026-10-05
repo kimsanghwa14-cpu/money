@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { koreaDate,validDate,monthRange,recurringDate,parseAmount,summarize,budgetSummary,blankRow,validateDraft,parseDelimited,exportCsv,duplicateKey,sumSafe,type Category,type Transaction,type Budget } from "../src/lib/domain.ts";
-import { COLUMNS,pasteRows } from "../src/lib/grid.ts";
+import { COLUMNS,pasteRows,ledgerColumns,sortLedgerRows,isFixedRow } from "../src/lib/grid.ts";
 import { validPublicKey } from "../src/lib/supabase/config.ts";
 const family="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const categoryIds={expense:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",income:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",saving:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",loan_principal:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4",transfer:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5",settlement:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6",loan_received:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7"};
@@ -79,4 +79,21 @@ test("브라우저용 설정은 secret/service-role 키를 거부한다",()=>{
  const token=(role:string)=>`eyJhbGciOiJIUzI1NiJ9.${jwt(role).split('.')[1]}.test`;
  assert.equal(validPublicKey("sb_secret_fake_test_placeholder"),false);assert.equal(validPublicKey(token("service_role")),false);
  assert.equal(validPublicKey(token("anon")),true);assert.equal(validPublicKey("sb_publishable_fake_test_placeholder"),true);assert.equal(validPublicKey(undefined),false);
+});
+
+test("personal ledger removes optional fields and pins fixed rows within each payroll or calendar month",()=>{
+ assert.equal(ledgerColumns(true,false).some(c=>["payment_method_id","account_id","cost_type"].includes(c.key)),false);
+ assert.equal(ledgerColumns(true,true).some(c=>c.key==="cost_type"),false);
+ assert.equal(ledgerColumns(true,true).some(c=>c.key==="account_id"),true);
+ const draft=(id:string,date:string,patch:Partial<Transaction>={})=>({...transaction({id,date,...patch}),amount:String(patch.amount??1000)});
+ const rows=[draft('fixed','2026-11-01',{recurrence_rule_id:'existing'}),draft('normal','2026-11-20'),draft('salary','2026-10-21',{kind:'income'}),draft('manual-fixed','2026-10-25',{cost_type:'fixed'}),draft('next','2026-11-21'),draft('invalid','')];
+ const valid=rows.slice(0,5), original=valid.map(r=>r.id);
+ assert.deepEqual(sortLedgerRows(valid,'date-asc','payroll').map(r=>r.id),['salary','normal','manual-fixed','fixed','next']);
+ assert.deepEqual(sortLedgerRows(valid,'date-desc','payroll').map(r=>r.id),['next','normal','salary','fixed','manual-fixed']);
+ assert.deepEqual(sortLedgerRows(valid,'amount-desc','payroll').map(r=>r.id),['normal','salary','fixed','manual-fixed','next']);
+ assert.deepEqual(sortLedgerRows(valid,'date-asc','calendar').map(r=>r.id),['salary','manual-fixed','normal','next','fixed']);
+ assert.deepEqual(sortLedgerRows(valid,'date-asc').map(r=>r.id),['salary','manual-fixed','fixed','normal','next']);
+ assert.deepEqual(valid.map(r=>r.id),original);
+ assert.doesNotThrow(()=>sortLedgerRows(rows,'date-asc','payroll'));
+ assert.equal(isFixedRow(draft('unclassified','2026-11-01')),false);
 });

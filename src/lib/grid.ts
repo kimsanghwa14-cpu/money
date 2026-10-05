@@ -1,4 +1,5 @@
-import { KINDS, STATUSES, blankRow, parseDelimited, type Account, type Category, type Draft, type Kind, type Named, type Owner, type Status } from "./domain.ts";
+import { payrollMonth } from "./periods.ts";
+import { KINDS, STATUSES, blankRow, validDate, parseDelimited, type Account, type Category, type Draft, type Kind, type Named, type Owner, type Status } from "./domain.ts";
 export const COLUMNS = [
   { key: "date", label: "날짜", width: 128 }, { key: "owner", label: "귀속", width: 88 },
   { key: "kind", label: "거래유형", width: 145 }, { key: "major", label: "대분류", width: 100 },
@@ -57,4 +58,28 @@ export function pasteRows(rows: Draft[], text: string, startRow: number, startCo
     next[index] = applyPastedCells(next[index], values, startCol, columns, categories, methods, accounts);
   });
   return next;
+}
+
+export function isFixedRow(row: Pick<Draft, "kind" | "cost_type" | "recurrence_rule_id">): boolean {
+  return !!row.recurrence_rule_id || (row.kind === "expense" && row.cost_type === "fixed");
+}
+export function ledgerColumns(personal: boolean, extras: boolean) {
+  const hidden = personal
+    ? ["memo", "target_account_id", "original_transaction_id", "payment_method_id", "account_id"]
+    : ["memo", "target_account_id", "original_transaction_id"];
+  return COLUMNS.filter(column => !(personal && column.key === "cost_type") && (extras || !hidden.includes(column.key)));
+}
+export function sortLedgerRows(rows: Draft[], sort: string, personalPeriod?: "payroll" | "calendar"): Draft[] {
+  const direction = sort.endsWith("desc") ? -1 : 1;
+  const groups = new Map(rows.map(row => [row.id, personalPeriod === "payroll" && validDate(row.date) ? payrollMonth(row.date) : row.date.slice(0, 7)]));
+  return rows.slice().sort((a, b) => {
+    if (personalPeriod) {
+      const month = groups.get(a.id)!.localeCompare(groups.get(b.id)!);
+      if (month) return month * (sort.startsWith("date") ? direction : 1);
+      const fixed = Number(isFixedRow(a)) - Number(isFixedRow(b));
+      if (fixed) return fixed;
+    }
+    if (sort.startsWith("amount")) return (Number(a.amount.replaceAll(",", "")) - Number(b.amount.replaceAll(",", ""))) * direction;
+    return a.date.localeCompare(b.date) * direction;
+  });
 }

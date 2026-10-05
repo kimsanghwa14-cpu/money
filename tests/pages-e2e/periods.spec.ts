@@ -7,7 +7,7 @@ function record(index:number,date:string,description:string,amount:number,kind:T
   return {id:`11111111-1111-4111-8111-${String(index).padStart(12,"0")}`,date,description,amount,kind,owner:"상화",category_id:kind==="income"?incomeCat:cat,
     status:"confirmed",version:1,memo:"브라우저 테스트 전용 가상 자료",payment_method_id:null,account_id:null,target_account_id:null,planned_amount:null,original_transaction_id:null,source_id:null,source_namespace:null};
 }
-async function mockApp(page:Page,request:APIRequestContext,large=false) {
+async function mockApp(page:Page,request:APIRequestContext,large=false,admin=false) {
   await page.clock.install({time:new Date("2026-10-04T03:00:00Z")});
   const store={rows:[record(1,"2026-10-20","경계 이전",10),record(2,"2026-10-21","가상 급여",500,"income"),record(3,"2026-11-05","다음 달 소비",100),record(4,"2026-11-20","종료일 소비",50),record(5,"2026-11-21","다음 주기",40),record(6,"2027-01-20","연말 주기",20)],requests:[] as string[]};
   if(large)store.rows=Array.from({length:405},(_,i)=>record(i+1,"2026-10-22",`가상 거래 ${i+1}`,i+1));
@@ -23,8 +23,8 @@ async function mockApp(page:Page,request:APIRequestContext,large=false) {
       if(url.searchParams.has("ids"))return route.fulfill({json:{transactions:store.rows.filter(row=>(url.searchParams.get("ids")??"").split(",").includes(row.id))}});
       const period=resolvePeriod(selectionFromParams(url.searchParams),url.searchParams.get("annual")==="1");
       const transactions=store.rows.filter(row=>periodContains(period,row.date));
-      const body={family:{id:"test-family",name:"검증용 가계부"},member:{user_id:"test-user",display_name:"테스트",role:"owner"},members:[],transactions,record_count:transactions.length,period,
-        categories:[{id:cat,family_id:"test-family",kind:"expense",major:"생활",minor:"기타지출"},{id:incomeCat,family_id:"test-family",kind:"income",major:"수입",minor:"급여"}],accounts:[],methods:[],budgets:[],rules:[],...(period.annual?{annual_transactions:transactions,annual_budgets:[]}: {})};
+      const body={family:{id:"test-family",name:"검증용 가계부"},member:{user_id:"test-user",display_name:"sangfire",role:"owner"},permissions:{view_modification_dates:admin},members:[],transactions,record_count:transactions.length,period,
+        categories:[{id:cat,family_id:"test-family",kind:"expense",major:"생활",minor:"기타지출"},{id:incomeCat,family_id:"test-family",kind:"income",major:"수입",minor:"급여"}],accounts:[{id:"22222222-2222-4222-8222-222222222222",name:"검증 계좌",kind:"bank"}],methods:[{id:"33333333-3333-4333-8333-333333333333",name:"검증 결제"}],budgets:[],rules:[],...(period.annual?{annual_transactions:transactions,annual_budgets:[]}: {})};
       return route.fulfill({json:body});
     }
     if(url.pathname==="/api/transactions") {
@@ -103,4 +103,37 @@ test("search and export cover all pages, not only the rendered page",async({page
   await page.getByLabel("내용 검색").fill("가상 거래 405");
   await expect(page.locator('.ledger-table input[data-col="0"]')).toHaveCount(1);
   await expect(page.getByRole("textbox",{name:"1행 내용",exact:true})).toHaveValue("가상 거래 405");
+});
+
+for (const admin of [false,true]) test(`personal columns, authorized audit and fixed rows remain at each month end: admin=${admin}`,async({page,request},testInfo)=>{
+ const store=await mockApp(page,request,false,admin);
+ const fixed=store.rows[2];
+ Object.assign(fixed,{recurrence_rule_id:"existing-fixed-rule",planned_amount:4500,payment_method_id:"33333333-3333-4333-8333-333333333333",account_id:"22222222-2222-4222-8222-222222222222",updated_at:"2026-10-01T03:00:00Z"});
+ store.rows.push({...record(7,"2026-11-01","직접 지정 고정비",70),cost_type:"fixed"});
+ await page.getByLabel("조회 연월",{exact:true}).fill("2026-10");
+ await page.getByRole("navigation").getByRole("button",{name:"상화 가계부"}).click();
+ const heading=(name:string)=>page.getByRole("columnheader",{name,exact:true});
+ for(const name of ["결제수단","계좌·카드","지출 구분","예정금액"])await expect(heading(name)).toHaveCount(0);
+ await expect(heading("거래ID·수정 이력")).toHaveCount(admin?1:0);
+ await expect(heading("수정일 (한국시간)")).toHaveCount(admin?1:0);
+ const dates=()=>page.locator('.ledger-table input[data-col="0"]').evaluateAll(inputs=>inputs.map(input=>(input as HTMLInputElement).value));
+ expect(await dates()).toEqual(["2026-10-21","2026-11-20","2026-11-01","2026-11-05"]);
+ await page.getByLabel("정렬",{exact:true}).selectOption("date-desc");
+ expect(await dates()).toEqual(["2026-11-20","2026-10-21","2026-11-05","2026-11-01"]);
+ await page.getByLabel("정렬",{exact:true}).selectOption("date-asc");
+ await page.getByLabel("보조 열",{exact:true}).check();
+ for(const name of ["결제수단","계좌·카드"])await expect(heading(name)).toHaveCount(1);
+ for(const name of ["지출 구분","예정금액"])await expect(heading(name)).toHaveCount(0);
+ await expect(heading("거래ID·수정 이력")).toHaveCount(admin?1:0);
+ await page.getByRole("textbox",{name:"4행 내용",exact:true}).fill("고정비 내용 수정 검증");
+ await page.getByRole("button",{name:"변경사항 저장",exact:true}).click();
+ await expect(page.getByRole("button",{name:"변경사항 저장",exact:true})).toBeDisabled();
+ const saved=store.rows.find(row=>row.id===fixed.id)!;
+ expect(saved.planned_amount).toBe(4500);expect(saved.recurrence_rule_id).toBe("existing-fixed-rule");
+ expect(saved.payment_method_id).toBe("33333333-3333-4333-8333-333333333333");expect(saved.account_id).toBe("22222222-2222-4222-8222-222222222222");
+ expect(saved.date).toBe("2026-11-05");expect(saved.amount).toBe(100);
+ expect(store.rows.find(row=>row.description==="직접 지정 고정비")?.cost_type).toBe("fixed");
+ await page.screenshot({path:testInfo.outputPath(`personal-columns-admin-${admin}.png`),fullPage:true});
+ await page.getByRole("button",{name:"전체 내역",exact:true}).click();
+ await expect.poll(dates).toEqual(["2026-10-20","2026-10-21","2026-11-20","2026-11-21","2026-11-01","2026-11-05","2027-01-20"]);
 });
