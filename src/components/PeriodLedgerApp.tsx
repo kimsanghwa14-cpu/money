@@ -5,6 +5,7 @@ import { entryDate, initialPeriod, ledgerUrl, periodDates, periodFileLabel, peri
 import { browserClient } from "@/lib/supabase/client";
 import Spreadsheet, { download } from "./Spreadsheet";
 import Dashboard from "./Dashboard";
+import PayrollSummary from "./PayrollSummary";
 import RangeDashboard from "./RangeDashboard";
 import PeriodControls from "./PeriodControls";
 import RecurringEditor from "./RecurringEditor";
@@ -64,6 +65,7 @@ export default function PeriodLedgerApp({ initialMonth }: { initialMonth: string
       {loading?<div className="loading" role="status"><span className="spinner"/>거래원장을 불러오는 중입니다.</div>:data?<>
         {tab==="dashboard"?(selection.mode==="calendar"?<Dashboard key={queryUrl} data={data} month={selection.month} onDirty={onDirty} onSaved={refresh} onTransactions={openTransactions} annual={annual} setAnnual={value=>{changePeriod(selection,value);}}/>:<RangeDashboard data={data} onTransactions={openTransactions}/>):null}
         {(tab==="상화"||tab==="하율"||tab==="transactions")?<>
+          {tab === "상화" || tab === "하율" ? <PayrollSummary key={tab} data={data} owner={tab} selectedMonth={selection.month} /> : null}
           {personal?<div className="compact-summary"><span>확정 수입 <strong>{money(personal.income)}</strong></span><span>소비지출 <strong>{money(personal.expense)}</strong></span><span>저축·투자·상환 <strong>{money(personal.allocation)}</strong></span><span>계산상 여유자금 <strong>{money(personal.remaining)}</strong></span></div>:null}
           {tab==="transactions"?<div className="view-toolbar"><span>귀속</span>{[undefined,"상화","하율","기타"].map(target=><button key={target??"전체"} className={owner===target?"primary":""} onClick={()=>{if(permissionToLeave()){setOwner(target as Owner|undefined);setScopes({});setGridKey(n=>n+1);}}}>{target??"전체"}</button>)}</div>:null}
           <Spreadsheet key={`${queryUrl}-${tab}-${gridKey}`} data={data} month={selection.month} owner={transactionOwner} initialFilter={filter} defaultDate={entryDate(period)} exportLabel={periodFileLabel(period)} onDirty={onDirty} onSaved={refresh}/>

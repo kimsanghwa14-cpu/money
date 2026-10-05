@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { monthlyFlows, change, previousMonth, chartSlices } from '../src/lib/dashboard.ts';
+import { monthlyFlows, payrollFlows, change, previousMonth, chartSlices } from '../src/lib/dashboard.ts';
 import { summarize, validateDraft, type Transaction, type Category } from '../src/lib/domain.ts';
 import { GET } from '../src/lib/api/dashboard.ts';
 import type { ServerRuntime } from '../src/lib/server.ts';
@@ -43,4 +43,15 @@ test('dashboard API scopes to verified family, rejects partial data and redacts 
  const response=await GET(request,runtime);assert.equal(response.status,200);assert.equal((await response.json()).transactions[0].updated_at,undefined);assert.equal(response.headers.get('cache-control'),'private, no-store');
  body.record_count=2;assert.equal((await GET(request,runtime)).status,503);body.record_count=1;body.family.id='wrong';assert.equal((await GET(request,runtime)).status,503);
  signedIn=false;assert.equal((await GET(request,runtime)).status,401);assert.equal(calls,3);
+});
+
+test('personal payroll totals preserve 20/21 boundaries, year rollover, refunds and allocations',()=>{
+ const rows=[row('dec',{date:'2026-01-20',kind:'income',amount:1000}),row('jan',{date:'2026-01-21',kind:'income',amount:2000}),row('end',{date:'2026-02-20',amount:300}),row('next',{date:'2026-02-21',amount:500}),row('refund',{date:'2026-02-20',kind:'refund',amount:100}),row('saving',{date:'2026-02-20',kind:'saving',amount:400}),row('other',{date:'2026-02-20',owner:'하율',amount:700}),row('transfer',{date:'2026-02-20',kind:'transfer',amount:99999}),row('planned',{date:'2026-02-20',status:'planned'})];
+ const flows=payrollFlows(rows,'상화');
+ assert.deepEqual(flows.map(f=>f.month),['2025-12','2026-01','2026-02']);
+ assert.deepEqual(flows[1],{month:'2026-01',start:'2026-01-21',end:'2026-02-20',income:2000,expense:200,balance:1800,allocation:400,remaining:1400});
+ assert.equal(payrollFlows(rows,'하율')[0].expense,700);
+ assert.equal(flows.reduce((n,f)=>n+f.income,0),summarize(rows,'상화').income);
+ assert.equal(flows.reduce((n,f)=>n+f.expense,0),summarize(rows,'상화').expense);
+ assert.throws(()=>payrollFlows([row('a'),row('a')],'상화'),/중복/);
 });

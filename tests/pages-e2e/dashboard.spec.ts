@@ -7,7 +7,7 @@ const categories=[{id:expenseId,family_id:'family',kind:'expense',major:'생활'
 const record=(id:string,date:string,kind:Transaction['kind'],owner:Transaction['owner'],amount:number,extra:Partial<Transaction>={}):Transaction=>({id,date,kind,owner,amount,category_id:kind==='income'?incomeId:expenseId,status:'confirmed',description:'브라우저 회귀검증 전용',memo:'',version:1,payment_method_id:null,account_id:null,target_account_id:null,planned_amount:null,original_transaction_id:null,source_id:null,source_namespace:null,...extra});
 const rows=[record('jan-income','2026-01-10','income','상화',4000),record('jan-expense','2026-01-11','expense','상화',1000),record('feb-income','2026-02-10','income','상화',5000),record('fixed','2026-02-11','expense','상화',1000,{recurrence_rule_id:'existing-rule'}),record('variable','2026-02-12','expense','하율',200,{cost_type:'variable'}),record('unspecified','2026-02-13','expense','기타',300),record('refund','2026-02-14','refund','상화',100,{original_transaction_id:'fixed'}),record('savings','2026-02-14','saving','상화',700),record('transfer','2026-02-15','transfer','상화',999999),record('future-planned','2032-01-21','income','상화',100000,{status:'planned'})];
 const family={id:'family',name:'회귀검증 전용 가족'};
-test('asset overview, latest month, month detail, exact chart totals and retained tools',async({page,request},testInfo)=>{
+test('asset overview, grouped monthly columns, personal payroll summaries and retained tools',async({page,request},testInfo)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.clock.install({time:new Date('2026-02-15T03:00:00Z')});
  await page.route('**/*.supabase.co/**',route=>route.abort());
@@ -27,12 +27,12 @@ test('asset overview, latest month, month detail, exact chart totals and retaine
  await page.goto(origin);
  await expect(page.getByRole('heading',{name:'현재 우리 집 재정상황'})).toBeVisible();
  await expect(page.getByTestId('dashboard-net-assets')).toHaveText('4,000원');
- await expect(page.getByTestId('latest-income')).toHaveText('5,000원');
- await expect(page.getByTestId('latest-expense')).toHaveText('1,400원');
- await expect(page.getByTestId('latest-balance')).toHaveText('3,600원');
- await expect(page.locator('.latest-flow')).toContainText('+25.0%');
+ await expect(page.locator('.latest-flow')).toHaveCount(0);
+ await expect(page.locator('.flow-table thead tr').first().locator('th')).toHaveText(['월','수입','총지출','잔액']);
+ await expect(page.locator('.flow-table thead tr').nth(1).locator('th')).toHaveText(['합계','상화','하율','기타']);
  const row=page.getByTestId('flow-2026-02');
  await expect(row).toContainText('900원');await expect(row).toContainText('200원');await expect(row).toContainText('300원');await expect(row).toContainText('1,400원');
+ await expect(row.locator('td')).toHaveText(['5,000원','1,400원','900원','200원','300원','3,600원 ↗']);
  await row.getByRole('button').click();
  await expect(page.getByRole('heading',{name:'2026-02 상세분석'})).toBeVisible();
  await expect(page.getByRole('img',{name:/수입 구성 합계 5,000원/})).toBeVisible();
@@ -46,6 +46,14 @@ test('asset overview, latest month, month detail, exact chart totals and retaine
  await page.keyboard.press('Escape');await expect(page.locator('.month-analysis')).toHaveCount(0);
  await page.locator('.selected-period-tools>summary').click();await expect(page.getByRole('heading',{name:/우리 집 돈 한눈에/})).toBeVisible();
  await page.getByRole('navigation').getByRole('button',{name:'상화 가계부'}).click();await expect(page.getByRole('heading',{name:'상화 거래원장'})).toBeVisible();
+ const payroll=page.getByTestId('payroll-상화-2026-01');
+ await expect(payroll.locator('td')).toHaveText(['2026-01-21 ~ 2026-02-20','5,000원','900원','4,100원','700원','3,400원']);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath('personal-payroll.png'),fullPage:true});
+ await page.getByLabel('급여주기 요약 조회 연도').selectOption('2025');
+ await expect(page.getByTestId('payroll-상화-2025-12')).toContainText('4,000원');
+ await page.getByRole('navigation').getByRole('button',{name:'하율 가계부'}).click();
+ await expect(page.getByTestId('payroll-하율-2026-01').locator('td')).toHaveText(['2026-01-21 ~ 2026-02-20','0원','200원','-200원','0원','-200원']);
  await page.getByRole('navigation').getByRole('button',{name:/고정비$/}).click();await expect(page.getByRole('heading',{name:'고정비 · 반복거래'})).toBeVisible();
  expect(errors).toEqual([]);
 });

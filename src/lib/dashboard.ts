@@ -1,4 +1,5 @@
-import { OWNERS, summarize, sumSafe, type Transaction, type Category } from "./domain.ts";
+import { payrollMonth, resolvePeriod } from "./periods.ts";
+import { OWNERS, summarize, sumSafe, type Transaction, type Category, type Owner } from "./domain.ts";
 export type Slice = { id: string; label: string; amount: number };
 export type MonthlyFlow = { month: string; income: number; expense: number; balance: number; allocation: number; owners: Slice[]; incomeCategories: Slice[]; expenseCategories: Slice[]; fixed: number; variable: number; unclassified: number; count: number };
 const actual = (row: Transaction) => row.status === "confirmed" && ["income", "expense", "refund", "saving", "loan_principal"].includes(row.kind);
@@ -46,3 +47,19 @@ export function chartSlices(items: Slice[], limit = 6): Slice[] {
   return [...sorted.slice(0, limit - 1), { id: "grouped-other", label: "그 외 분류", amount: sorted.slice(limit - 1).reduce((n, item) => sumSafe(n, item.amount), 0) }];
 }
 export function share(amount: number, total: number): string { return total > 0 && amount >= 0 ? `${(amount / total * 100).toFixed(1)}%` : "비율 계산 불가"; }
+
+export function payrollFlows(transactions: Transaction[], owner: Owner) {
+  const ids = new Set<string>(), groups = new Map<string, Transaction[]>();
+  for (const row of transactions) {
+    if (ids.has(row.id)) throw new Error("중복 거래가 조회되어 집계를 중단했습니다. 다시 조회하세요.");
+    ids.add(row.id);
+    if (row.owner !== owner || !actual(row)) continue;
+    const month = payrollMonth(row.date), group = groups.get(month) ?? [];
+    group.push(row); groups.set(month, group);
+  }
+  return [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([month, rows]) => {
+    const summary = summarize(rows, owner), period = resolvePeriod({ mode: "payroll", month, start: "", end: "" });
+    return { month, start: period.start!, end: period.end!, income: summary.income, expense: summary.expense,
+      balance: summary.consumptionRemaining, allocation: summary.allocation, remaining: summary.remaining };
+  });
+}
