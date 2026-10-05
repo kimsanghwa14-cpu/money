@@ -30,6 +30,9 @@ test('asset overview, grouped monthly columns, personal payroll summaries and re
  await expect(page.locator('.latest-flow')).toHaveCount(0);
  await expect(page.locator('.flow-table thead tr').first().locator('th')).toHaveText(['월','수입','총지출','잔액']);
  await expect(page.locator('.flow-table thead tr').nth(1).locator('th')).toHaveText(['합계','상화','하율','기타']);
+ await expect(page.locator('.flow-table tbody tr').first()).toHaveAttribute('data-testid','flow-annual-total');
+ await expect(page.getByTestId('flow-annual-total').locator('td')).toHaveText(['9,000원','2,400원','1,900원','200원','300원','6,600원']);
+ await expect(page.locator('.flow-table tbody tr').nth(1)).toHaveAttribute('data-testid','flow-2026-01');
  const row=page.getByTestId('flow-2026-02');
  await expect(row).toContainText('900원');await expect(row).toContainText('200원');await expect(row).toContainText('300원');await expect(row).toContainText('1,400원');
  await expect(row.locator('td')).toHaveText(['5,000원','1,400원','900원','200원','300원','3,600원 ↗']);

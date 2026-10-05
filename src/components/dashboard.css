@@ -2,3 +2,5 @@
 @media(max-width:640px){.flow-table thead th.flow-balance-heading,.flow-table tbody td:nth-child(7){position:sticky;right:0;z-index:2;background:var(--surface);border-left:1px solid var(--line)}.flow-table thead th.flow-balance-heading{background:#f5f8f7}.flow-table .flow-selected td:nth-child(7){background:var(--accent-light)}}
 
 .flow-table .expense-group{text-align:center;border-bottom:1px solid var(--line)}.payroll-summary{min-width:0;margin-bottom:24px}.payroll-summary .section-heading{flex-wrap:wrap}.payroll-table{min-width:850px}.payroll-table td,.payroll-table th{white-space:nowrap;font-variant-numeric:tabular-nums}.payroll-table .flow-selected td,.payroll-table .flow-selected th{background:var(--accent-light)}
+
+.flow-table .flow-annual-total th,.flow-table .flow-annual-total td{background:var(--accent-light);font-weight:700;border-bottom:2px solid var(--line)}
