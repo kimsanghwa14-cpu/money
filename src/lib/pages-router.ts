@@ -1,5 +1,6 @@
 import type { ServerRuntime } from "./server.ts";
 import { context, fail } from "./server.ts";
+import { GET as dashboard } from "./api/dashboard.ts";
 import { GET as ledger } from "./api/ledger.ts";
 import { POST as transactions } from "./api/transactions.ts";
 import { POST as budgets } from "./api/budgets.ts";
@@ -8,6 +9,7 @@ import { POST as recurring } from "./api/recurring.ts";
 import { GET as readAssets, POST as writeAssets } from "./api/assets.ts";
 
 const routes: Record<string, { method: string; handle: (request: Request, runtime: ServerRuntime) => Promise<Response> }> = {
+  "/api/dashboard": { method: "GET", handle: dashboard },
   "/api/ledger": { method: "GET", handle: ledger },
   "/api/transactions": { method: "POST", handle: transactions },
   "/api/budgets": { method: "POST", handle: budgets },

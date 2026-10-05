@@ -41,6 +41,7 @@ export async function verifyDashboardAndRecurring(page, original, ledgerPath) {
     await page.getByRole('heading', { name: '집계표', exact: true }).waitFor();
     await page.getByRole('button', { name: '달력월', exact: true }).click();
     await page.getByLabel('조회 연월', { exact: true }).fill(month);
+    await page.locator('.selected-period-tools>summary').click();
     await page.getByRole('heading', { name: /우리 집 돈 한눈에/ }).waitFor();
     await expect(page.getByTestId('dashboard-income').locator('strong')).toHaveText('10,000원');
     await expect(page.getByTestId('dashboard-expense').locator('strong')).toHaveText('800원');
@@ -59,6 +60,7 @@ export async function verifyDashboardAndRecurring(page, original, ledgerPath) {
     await expect(page.getByRole('button', { name: '+ 예산 행 추가', exact: true })).toBeVisible();
     await page.locator('#budget-editor>summary').click();
     await page.getByRole('button', { name: '연간 비교 펼치기', exact: true }).click();
+    if (await page.locator('.selected-period-tools').getAttribute('open') === null) await page.locator('.selected-period-tools>summary').click();
     await expect(page.locator('.annual-overview tbody tr')).toHaveCount(12);
     await page.getByRole('button', { name: '연간 비교 접기', exact: true }).click();
     for (const owner of ['상화', '하율']) {

@@ -16,6 +16,7 @@ export type Transaction = {
   target_account_id: string | null; status: Status; memo: string; version: number;
   planned_amount: number | null; original_transaction_id: string | null;
   source_id: string | null; source_namespace: string | null;
+  cost_type?: "fixed" | "variable" | null;
   recurrence_rule_id?: string | null; created_by?: string; updated_by?: string;
   created_at?: string; updated_at?: string;
 };
@@ -116,6 +117,8 @@ export function validateDraft(row: Draft, categories: Category[], methods: Named
   const category = categories.find(c => c.id === row.category_id);
   if (!category || category.kind !== (row.kind === "refund" ? "expense" : row.kind)) errors.category_id = "거래유형에 맞는 분류를 선택하세요.";
   if (!row.description.trim() || row.description.length > 120) errors.description = "내용을 1~120자로 입력하세요.";
+  if (row.cost_type != null && !["fixed", "variable"].includes(row.cost_type)) errors.cost_type = "고정비·변동비 또는 미지정을 선택하세요.";
+  if (row.cost_type != null && row.kind !== "expense") errors.cost_type = "소비지출에만 지정하세요.";
   if (row.memo.length > 500) errors.memo = "메모는 500자 이내로 입력하세요.";
   try { parseAmount(row.amount); } catch (e) { errors.amount = (e as Error).message; }
   if (row.payment_method_id && !methods.some(m => m.id === row.payment_method_id)) errors.payment_method_id = "등록된 결제수단을 선택하세요.";

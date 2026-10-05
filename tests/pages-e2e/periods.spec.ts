@@ -17,6 +17,7 @@ async function mockApp(page:Page,request:APIRequestContext,large=false) {
     const url=new URL(route.request().url());
     if(url.pathname==="/api/session")return route.fulfill({json:{configured:true}});
     if(url.pathname==="/api/assets")return route.fulfill({json:{assets:[],asset_snapshot:null}});
+    if(url.pathname==="/api/dashboard") return route.fulfill({json:{family:{id:"test-family",name:"검증용 가계부"},record_count:store.rows.length,transactions:store.rows,categories:[{id:cat,family_id:"test-family",kind:"expense",major:"생활",minor:"기타지출"},{id:incomeCat,family_id:"test-family",kind:"income",major:"수입",minor:"급여"}]}});
     if(url.pathname==="/api/ledger") {
       store.requests.push(url.search);
       if(url.searchParams.has("ids"))return route.fulfill({json:{transactions:store.rows.filter(row=>(url.searchParams.get("ids")??"").split(",").includes(row.id))}});

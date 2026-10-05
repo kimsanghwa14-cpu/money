@@ -1,0 +1,35 @@
+begin;
+create function pg_temp.dashboard_check(ok boolean,msg text) returns void language plpgsql as $$begin if ok is distinct from true then raise exception 'DASHBOARD TEST FAILED: %',msg; end if; end$$;
+create temp table dashboard_keys(actor uuid,family uuid);
+insert into dashboard_keys values(gen_random_uuid(),gen_random_uuid());
+insert into auth.users(id,email,created_at,updated_at) select actor,actor::text||'@dashboard-test.invalid',now(),now() from dashboard_keys;
+insert into public.families(id,name) select family,'롤백 검증 전용 가족' from dashboard_keys;
+insert into public.family_members(family_id,user_id,display_name,role) select family,actor,'검증용','owner' from dashboard_keys;
+grant select on dashboard_keys to authenticated;
+set local role authenticated;
+select set_config('request.jwt.claim.sub',(select actor::text from dashboard_keys),true);
+do $$declare f uuid:=(select family from dashboard_keys); category uuid; row_id uuid:=gen_random_uuid(); req uuid:=gen_random_uuid(); payload jsonb; item jsonb; snapshot jsonb; count_before integer; subtype text; denied boolean; begin
+ select id into category from public.categories where family_id=f and kind='expense' limit 1;
+ item:=jsonb_build_object('id',row_id,'version',0,'date','2026-02-12','owner','상화','kind','expense','category_id',category,'description','명시적 구분 검증','amount',100,'status','confirmed','memo','','cost_type','variable');
+ payload:=jsonb_build_object('upserts',jsonb_build_array(item),'deletes','[]'::jsonb);
+ perform public.save_transactions(f,req,payload);perform public.save_transactions(f,req,payload);
+ perform pg_temp.dashboard_check((select count(*)=1 and max(version)=1 and max(cost_type)='variable' from public.transactions where family_id=f),'cost field persists once across retry');
+ item:=(item-'cost_type')||jsonb_build_object('version',1,'amount',200);
+ perform public.save_transactions(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(item),'deletes','[]'::jsonb));
+ perform pg_temp.dashboard_check((select cost_type='variable' and amount=200 and version=2 from public.transactions where id=row_id),'legacy edits preserve explicit classification');
+ denied:=false;begin perform public.save_transactions(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(item||jsonb_build_object('version',2,'cost_type','guessed')),'deletes','[]'::jsonb)); exception when check_violation then denied:=true;end;
+ perform pg_temp.dashboard_check(denied,'database rejects invalid classification');
+ select count(*) into count_before from public.transactions where family_id=f;
+ snapshot:=public.load_dashboard(f);
+ perform pg_temp.dashboard_check((snapshot->>'record_count')::integer=1 and snapshot->'transactions'->0->>'cost_type'='variable','dashboard includes explicit field');
+ perform pg_temp.dashboard_check((select count(*)=count_before from public.transactions where family_id=f),'dashboard read never generates planned rows');
+ foreach subtype in array array['savings','bank_deposit','stock','cash'] loop
+ perform public.save_assets(f,gen_random_uuid(),jsonb_build_object('upserts',jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'version',0,'name',subtype,'owner','상화','kind',subtype,'basis_date','2026-02-12','balance',10,'memo','')),'deletes','[]'::jsonb));
+ end loop;
+ perform pg_temp.dashboard_check((select count(*)=4 and sum(balance)=40 from public.assets where family_id=f),'all explicit asset kinds save without duplication');
+ denied:=false;begin perform public.load_dashboard(gen_random_uuid());exception when insufficient_privilege then denied:=true;end;
+ perform pg_temp.dashboard_check(denied,'outside family denied');
+end$$;
+reset role;
+rollback;
+select 'DASHBOARD_DB_CHECKS_PASSED' as result;

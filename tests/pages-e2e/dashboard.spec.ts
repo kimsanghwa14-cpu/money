@@ -1,0 +1,51 @@
+import {test,expect} from '@playwright/test';
+import {resolvePeriod,selectionFromParams} from '../../src/lib/periods';
+import {type Transaction} from '../../src/lib/domain';
+const origin='https://money-ab4.pages.dev';
+const expenseId='00000000-0000-4000-8000-000000000001',incomeId='00000000-0000-4000-8000-000000000002';
+const categories=[{id:expenseId,family_id:'family',kind:'expense',major:'생활',minor:'식비'},{id:incomeId,family_id:'family',kind:'income',major:'수입',minor:'급여'}];
+const record=(id:string,date:string,kind:Transaction['kind'],owner:Transaction['owner'],amount:number,extra:Partial<Transaction>={}):Transaction=>({id,date,kind,owner,amount,category_id:kind==='income'?incomeId:expenseId,status:'confirmed',description:'브라우저 회귀검증 전용',memo:'',version:1,payment_method_id:null,account_id:null,target_account_id:null,planned_amount:null,original_transaction_id:null,source_id:null,source_namespace:null,...extra});
+const rows=[record('jan-income','2026-01-10','income','상화',4000),record('jan-expense','2026-01-11','expense','상화',1000),record('feb-income','2026-02-10','income','상화',5000),record('fixed','2026-02-11','expense','상화',1000,{recurrence_rule_id:'existing-rule'}),record('variable','2026-02-12','expense','하율',200,{cost_type:'variable'}),record('unspecified','2026-02-13','expense','기타',300),record('refund','2026-02-14','refund','상화',100,{original_transaction_id:'fixed'}),record('savings','2026-02-14','saving','상화',700),record('transfer','2026-02-15','transfer','상화',999999),record('future-planned','2032-01-21','income','상화',100000,{status:'planned'})];
+const family={id:'family',name:'회귀검증 전용 가족'};
+test('asset overview, latest month, month detail, exact chart totals and retained tools',async({page,request},testInfo)=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.clock.install({time:new Date('2026-02-15T03:00:00Z')});
+ await page.route('**/*.supabase.co/**',route=>route.abort());
+ await page.route(`${origin}/**`,async route=>{
+  const u=new URL(route.request().url());
+  if(u.pathname==='/api/session')return route.fulfill({json:{configured:true}});
+  if(u.pathname==='/api/dashboard')return route.fulfill({json:{family,categories,transactions:rows,record_count:rows.length}});
+  if(u.pathname==='/api/assets')return route.fulfill({json:{asset_snapshot:null,assets:[{id:'bank',name:'예금',kind:'bank_deposit',owner:'상화',balance:10000,basis_date:'2026-02-15',memo:''},{id:'debt',name:'대출',kind:'loan',owner:'상화',balance:6000,basis_date:'2026-02-15',memo:''}]}});
+  if(u.pathname==='/api/ledger'){
+   const period=resolvePeriod(selectionFromParams(u.searchParams),u.searchParams.get('annual')==='1');
+   const transactions=rows.filter(row=>(!period.start||row.date>=period.start)&&(!period.end||row.date<=period.end));
+   return route.fulfill({json:{family,member:{user_id:'user',display_name:'회귀검증',role:'owner'},period,record_count:transactions.length,transactions,categories,accounts:[],methods:[],budgets:[],rules:[]}});
+  }
+  if(u.pathname.startsWith('/api/'))return route.fulfill({status:404,json:{error:'Unmocked API'}});
+  await route.fulfill({response:await request.get(`http://127.0.0.1:3000${u.pathname}${u.search}`)});
+ });
+ await page.goto(origin);
+ await expect(page.getByRole('heading',{name:'현재 우리 집 재정상황'})).toBeVisible();
+ await expect(page.getByTestId('dashboard-net-assets')).toHaveText('4,000원');
+ await expect(page.getByTestId('latest-income')).toHaveText('5,000원');
+ await expect(page.getByTestId('latest-expense')).toHaveText('1,400원');
+ await expect(page.getByTestId('latest-balance')).toHaveText('3,600원');
+ await expect(page.locator('.latest-flow')).toContainText('+25.0%');
+ const row=page.getByTestId('flow-2026-02');
+ await expect(row).toContainText('900원');await expect(row).toContainText('200원');await expect(row).toContainText('300원');await expect(row).toContainText('1,400원');
+ await row.getByRole('button').click();
+ await expect(page.getByRole('heading',{name:'2026-02 상세분석'})).toBeVisible();
+ await expect(page.getByRole('img',{name:/수입 구성 합계 5,000원/})).toBeVisible();
+ await expect(page.getByRole('img',{name:/기타 지출 구성 합계 1,400원/})).toBeVisible();
+ await expect(page.getByTestId('cost-breakdown')).toContainText('900원');await expect(page.getByTestId('cost-breakdown')).toContainText('64.3%');await expect(page.getByTestId('cost-breakdown')).toContainText('구분 미지정');
+ await page.getByRole('button',{name:'카테고리별',exact:true}).click();await expect(page.getByRole('img',{name:/지출 카테고리 구성 합계 1,400원/})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath('dashboard-detail.png'),fullPage:true});
+ await page.getByRole('button',{name:'월별 상세분석 닫기'}).click();await expect(row.getByRole('button')).toBeFocused();
+ await page.getByTestId('flow-2026-01').getByRole('button').click();await expect(page.locator('.month-analysis')).toContainText('비교 데이터 없음');
+ await page.keyboard.press('Escape');await expect(page.locator('.month-analysis')).toHaveCount(0);
+ await page.locator('.selected-period-tools>summary').click();await expect(page.getByRole('heading',{name:/우리 집 돈 한눈에/})).toBeVisible();
+ await page.getByRole('navigation').getByRole('button',{name:'상화 가계부'}).click();await expect(page.getByRole('heading',{name:'상화 거래원장'})).toBeVisible();
+ await page.getByRole('navigation').getByRole('button',{name:/고정비$/}).click();await expect(page.getByRole('heading',{name:'고정비 · 반복거래'})).toBeVisible();
+ expect(errors).toEqual([]);
+});

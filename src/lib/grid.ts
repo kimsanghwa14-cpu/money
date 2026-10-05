@@ -7,6 +7,7 @@ export const COLUMNS = [
   { key: "account_id", label: "계좌·카드", width: 130 }, { key: "status", label: "상태", width: 95 },
   { key: "memo", label: "메모", width: 180 }, { key: "target_account_id", label: "받는 계좌·카드", width: 150 },
   { key: "original_transaction_id", label: "환불 원거래ID", width: 280 },
+  { key: "cost_type", label: "지출 구분", width: 130 },
 ] as const;
 export type ColumnKey = typeof COLUMNS[number]["key"];
 export function categoryParts(row: Draft, categories: Category[]): [string, string] {
@@ -18,6 +19,7 @@ export function categoryParts(row: Draft, categories: Category[]): [string, stri
 export function cellText(row: Draft, key: ColumnKey, categories: Category[], methods: Named[], accounts: Account[]): string {
   if (key === "major" || key === "minor") return categoryParts(row, categories)[key === "major" ? 0 : 1];
   if (key === "kind") return KINDS[row.kind] ?? row.kind;
+  if (key === "cost_type") return row.cost_type === "fixed" ? "고정비" : row.cost_type === "variable" ? "변동비" : "";
   if (key === "status") return STATUSES[row.status] ?? row.status;
   if (key === "payment_method_id") return methods.find(m => m.id === row.payment_method_id)?.name ?? row.payment_method_id ?? "";
   if (key === "account_id" || key === "target_account_id") return accounts.find(a => a.id === row[key])?.name ?? row[key] ?? "";
@@ -34,10 +36,12 @@ export function applyPastedCells(original: Draft, values: string[], startCol: nu
     else if (key === "status") row.status = (Object.keys(STATUSES).find(k => STATUSES[k as Status] === value || k === value) ?? value) as Status;
     else if (key === "payment_method_id") row.payment_method_id = value ? methods.find(m => m.name === value || m.id === value)?.id ?? value : null;
     else if (key === "account_id" || key === "target_account_id") row[key] = value ? accounts.find(a => a.name === value || a.id === value)?.id ?? value : null;
+    else if (key === "cost_type") row.cost_type = value ? (value === "고정비" ? "fixed" : value === "변동비" ? "variable" : value) as Draft["cost_type"] : null;
     else if (key === "owner") row.owner = value as Owner;
     else if (key === "original_transaction_id") row.original_transaction_id = value || null;
     else row[key] = value;
   });
+  if (row.kind !== "expense") row.cost_type = null;
   if (categoryChanged) row.category_id = categories.find(c => c.kind === (row.kind === "refund" ? "expense" : row.kind) && c.major === major && c.minor === minor)?.id ?? `unresolved:${major}|${minor}`;
   return row;
 }

@@ -1,6 +1,6 @@
 import { OWNERS, UUID, parseAmount, sumSafe, validDate, type Owner } from "./domain.ts";
 
-export const ASSET_KINDS = { deposit: "예금·현금", pension: "연금", investment: "투자", other: "기타 자산", loan: "대출" } as const;
+export const ASSET_KINDS = { savings: "적금", bank_deposit: "예금", stock: "주식", cash: "현금", deposit: "예금·현금", pension: "연금", investment: "투자", other: "기타 자산", loan: "대출" } as const;
 export type AssetKind = keyof typeof ASSET_KINDS;
 export type Asset = {
   id: string; name: string; owner: Owner; kind: AssetKind; basis_date: string;

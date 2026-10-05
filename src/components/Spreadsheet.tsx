@@ -159,19 +159,19 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
       "aria-describedby": error ? `err-${row.id}-${key}` : undefined, "data-row": rowIndex, "data-col": colIndex, "data-id": row.id,
       onKeyDown: (e: KeyboardEvent) => move(e, rowIndex, colIndex), onPaste: (e: ClipboardEvent) => paste(e, row, colIndex), disabled: saving };
     let input;
-    if (key === "owner" || key === "kind" || key === "status" || key === "payment_method_id" || key === "account_id" || key === "target_account_id" || key === "major" || key === "minor") {
+    if (key === "cost_type" || key === "owner" || key === "kind" || key === "status" || key === "payment_method_id" || key === "account_id" || key === "target_account_id" || key === "major" || key === "minor") {
       const kindCategories = data.categories.filter(c => c.kind === (row.kind === "refund" ? "expense" : row.kind));
       const [major, minor] = categoryParts(row, data.categories);
-      const options = key === "owner" ? OWNERS.map(v => [v, v]) : key === "kind" ? Object.entries(KINDS) : key === "status" ? Object.entries(STATUSES) : key === "payment_method_id" ? data.methods.map(m => [m.id, m.name]) : key === "account_id" || key === "target_account_id" ? data.accounts.map(a => [a.id, a.name]) : key === "major" ? [...new Set(kindCategories.map(c => c.major))].map(v => [v, v]) : kindCategories.filter(c => c.major === major).map(c => [c.minor, c.minor]);
+      const options = key === "cost_type" ? [["fixed", "고정비"], ["variable", "변동비"]] : key === "owner" ? OWNERS.map(v => [v, v]) : key === "kind" ? Object.entries(KINDS) : key === "status" ? Object.entries(STATUSES) : key === "payment_method_id" ? data.methods.map(m => [m.id, m.name]) : key === "account_id" || key === "target_account_id" ? data.accounts.map(a => [a.id, a.name]) : key === "major" ? [...new Set(kindCategories.map(c => c.major))].map(v => [v, v]) : kindCategories.filter(c => c.major === major).map(c => [c.minor, c.minor]);
       const value = key === "major" ? major : key === "minor" ? minor : row[key] ?? "";
-      input = <select {...common} value={value} onChange={e => {
+      input = <select {...common} disabled={saving || (key === "cost_type" && row.kind !== "expense")} value={value} onChange={e => {
         const v = e.target.value;
-        if (key === "kind") { if (["refund", "transfer", "settlement"].includes(v)) setExtras(true); update(row.id, { kind: v as Draft["kind"], category_id: data.categories.find(c => c.kind === (v === "refund" ? "expense" : v))?.id ?? "", original_transaction_id: null }); }
+        if (key === "kind") { if (["refund", "transfer", "settlement"].includes(v)) setExtras(true); update(row.id, { kind: v as Draft["kind"], category_id: data.categories.find(c => c.kind === (v === "refund" ? "expense" : v))?.id ?? "", original_transaction_id: null, cost_type: v === "expense" ? row.cost_type : null }); }
         else if (key === "major") update(row.id, { category_id: kindCategories.find(c => c.major === v)?.id ?? "" });
         else if (key === "minor") update(row.id, { category_id: kindCategories.find(c => c.major === major && c.minor === v)?.id ?? "" });
-        else update(row.id, { [key]: v || (key.endsWith("_id") ? null : "") });
+        else update(row.id, { [key]: v || ((key.endsWith("_id") || key === "cost_type") ? null : "") });
       }}>
-        <option value="">{key === "owner" ? "귀속 확인" : "선택"}</option>
+        <option value="">{key === "owner" ? "귀속 확인" : key === "cost_type" ? row.kind === "refund" ? "원거래 기준" : row.recurrence_rule_id ? "고정비 (반복규칙)" : "구분 미지정" : "선택"}</option>
         {value && !options.some(([v]) => v === value) && <option value={value}>미확정: {value}</option>}
         {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
       </select>;

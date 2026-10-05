@@ -1,66 +1,75 @@
 "use client";
-import { OWNERS, KINDS, STATUSES, summarize, budgetSummary, money, sumSafe, type LedgerData, type Owner } from "@/lib/domain";
-import BudgetEditor from "./BudgetEditor";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { money, sumSafe, type LedgerData, type Owner } from "@/lib/domain";
+import { monthlyFlows, previousMonth, change, chartSlices, share, type Slice, type MonthlyFlow } from "@/lib/dashboard";
+import type { LedgerPeriod } from "@/lib/periods";
 import FinancialStatus from "./FinancialStatus";
-import { periodTitle, periodDates, type LedgerPeriod } from "@/lib/periods";
+import SelectedPeriodDashboard from "./SelectedPeriodDashboard";
+import "./dashboard.css";
 type Props = { data: LedgerData; month: string; onDirty: (scope: string, dirty: boolean) => void; onSaved: () => Promise<void>; onTransactions: (owner?: Owner, filter?: string) => void; annual: boolean; setAnnual: (value: boolean) => void; rangePeriod?: LedgerPeriod };
-export default function Dashboard({ data, month, onDirty, onSaved, onTransactions, annual, setAnnual, rangePeriod }: Props) {
-  const isRange = !!rangePeriod || annual;
-  const viewTitle = rangePeriod ? periodTitle(rangePeriod) : annual ? month.slice(0, 4) + "년" : Number(month.slice(5)) + "월";
-  const total = summarize(data.transactions), planned = budgetSummary(data.budgets, data.categories);
-  const categoryRows = data.categories.filter(c => ["income", "expense", "saving", "loan_principal"].includes(c.kind)).map(c => ({
-    ...c,
-    plan: (isRange ? [] : data.budgets).filter(b => b.category_id === c.id).reduce((sum, b) => sumSafe(sum, b.amount), 0),
-    pending: data.transactions.filter(t => t.status === "planned" && t.category_id === c.id).reduce((sum, t) => sumSafe(sum, t.kind === "refund" ? -t.amount : t.amount), 0),
-    actual: data.transactions.filter(t => t.status === "confirmed" && t.category_id === c.id).reduce((sum, t) => sumSafe(sum, t.kind === "refund" ? -t.amount : t.amount), 0),
-  })).filter(c => c.plan !== 0 || c.actual !== 0 || (isRange && c.pending !== 0));
-  const spending = categoryRows.filter(c => c.kind === "expense" && c.actual > 0).sort((a, b) => b.actual - a.actual || a.minor.localeCompare(b.minor));
-  const highest = Math.max(1, ...spending.map(c => c.actual));
-  const recurring = data.transactions.filter(t => t.recurrence_rule_id);
-  const pending = recurring.filter(t => t.status === "planned").sort((a, b) => a.date.localeCompare(b.date));
-  const confirmed = recurring.filter(t => t.status === "confirmed").length;
-  const budgetRemaining = sumSafe(planned.expense, -total.expense);
-  const budgetPercent = planned.expense > 0 ? Math.round(total.expense / planned.expense * 100) : null;
-  const overBudget = categoryRows.filter(c => c.kind === "expense" && c.plan > 0 && c.actual > c.plan).length;
-  const afterPlanned = sumSafe(total.remaining, -total.plannedOut);
-  const metrics = [
-    { label: "들어온 돈", amount: total.income, help: "확정 수입", filter: "income" },
-    { label: "쓴 돈", amount: total.expense, help: "확정 소비지출 · 환불 차감", filter: "expense" },
-    { label: "모으고 갚은 돈", amount: total.allocation, help: "저축·투자·대출 원금상환", filter: "allocation" },
-  ];
-  return <div className="dashboard-overview">
-    <section className="month-overview" aria-labelledby="month-overview-title">
-      <div className="overview-heading"><div><span className="eyebrow">선택 기간 가계 현황</span><h2 id="month-overview-title">{viewTitle}, 우리 집 돈 한눈에</h2></div><span className="badge">확정 내역 기준</span></div>
-      <div className="money-overview">
-        <button className={"remaining-card" + (total.remaining < 0 ? " is-negative" : "")} onClick={() => onTransactions(undefined, "balance")} data-testid="dashboard-remaining"><span>{isRange ? "이 기간 남은 돈" : "이번 달 남은 돈"}</span><strong>{money(total.remaining)}</strong><small>수입 − 소비지출 − 저축·투자·원금상환</small></button>
-        <div className="money-metrics">{metrics.map(m => <button key={m.filter} className="money-metric" onClick={() => onTransactions(undefined, m.filter)} data-testid={"dashboard-" + m.filter}><span>{m.label}</span><strong>{money(m.amount)}</strong><small>{m.help}</small></button>)}</div>
-      </div>
-      {rangePeriod && <p className="overview-period">{periodDates(rangePeriod)}</p>}
-      <div className="overview-foot"><span>남은 돈은 거래 내역으로 계산한 금액이며 실제 계좌잔액과 다를 수 있어요.</span><button className="text-button" onClick={() => onTransactions()}>거래 내역 보기 →</button></div>
-    </section>
-    <div className="dashboard-focus-grid">
-      {isRange ? <>      <section className="panel budget-overview"><div className="section-heading"><h2>수입 중 얼마나 썼을까?</h2><span className="badge">소비지출 기준</span></div>{total.income > 0 ? <><div className="budget-headline"><strong>{Math.round(total.expense / total.income * 100)}%</strong><span>수입 대비 소비지출</span></div><div className="budget-meter"><span style={{width: Math.min(100, Math.max(0, total.expense / total.income * 100)) + "%"}} /></div><div className="budget-meter-labels"><span>소비지출 {money(total.expense)}</span><span>수입 {money(total.income)}</span></div><p className="muted">소비 후 {money(total.consumptionRemaining)} · 저축·투자·원금상환 전 금액</p></> : <div className="dashboard-empty"><strong>아직 확정된 수입이 없어요</strong><p>지출은 {money(total.expense)}이며 수입 대비 비율은 계산하지 않아요.</p></div>}<p className="muted chart-note">월별 계획예산은 상단 ‘달력월’에서 따로 비교할 수 있어요.</p></section>
-</> : <>      <section className="panel budget-overview"><div className="section-heading"><h2>생활비 예산, 얼마나 썼을까?</h2>{budgetPercent !== null && <span className={"badge " + (budgetRemaining < 0 ? "warning" : "success")}>{budgetRemaining < 0 ? "예산 초과" : "예산 안에서 사용 중"}</span>}</div>
-        {budgetPercent !== null ? <><div className="budget-headline"><strong data-testid="dashboard-budget-remaining">{money(Math.abs(budgetRemaining))}</strong><span>{budgetRemaining < 0 ? "예산보다 더 썼어요" : "예산이 남았어요"}</span></div><div className={"budget-meter" + (budgetRemaining < 0 ? " over-budget" : "")}><span style={{ width: Math.min(100, Math.max(0, budgetPercent)) + "%" }} /></div><div className="budget-meter-labels"><span>소비지출 {money(total.expense)}</span><span>예산 {money(planned.expense)}</span></div><p className="muted">예산 사용률 {budgetPercent}%{overBudget > 0 ? " · " + overBudget + "개 분류에서 예산 초과" : ""}</p></> : <div className="dashboard-empty"><strong>생활비 예산을 정해보세요</strong><p>예산을 등록하면 쓴 돈과 남은 예산을 바로 비교할 수 있어요.</p></div>}
-        <button className="dashboard-link text-button" onClick={() => { const editor = document.getElementById("budget-editor") as HTMLDetailsElement | null; if (editor) { editor.open = true; editor.scrollIntoView({ block: "start" }); editor.querySelector("summary")?.focus(); } }}>이번 달 예산 설정 →</button>
+const COLORS = ["#234f46", "#557a9b", "#ba8b42", "#85668d", "#668174", "#a16e6a"];
+function Comparison({ value, previous, spending = false }: { value: number; previous?: number; spending?: boolean }) {
+  const diff = change(value, previous);
+  if (!diff) return <small className="flow-change">비교 데이터 없음</small>;
+  const direction = diff.amount > 0 ? "▲ 증가" : diff.amount < 0 ? "▼ 감소" : "변동 없음";
+  const tone = diff.amount === 0 ? "" : (spending ? diff.amount < 0 : diff.amount > 0) ? "favorable" : "caution";
+  return <small className={`flow-change ${tone}`}>전월 대비 {direction} {diff.amount > 0 ? "+" : ""}{money(diff.amount)} {diff.percent === null ? "(증감률 계산 불가)" : `(${diff.percent > 0 ? "+" : ""}${diff.percent.toFixed(1)}%)`}</small>;
+}
+function Donut({ title, items, total }: { title: string; items: Slice[]; total: number }) {
+  const segments = chartSlices(items), valid = total > 0 && segments.every(item => item.amount >= 0);
+  let offset = 0;
+  const stops = segments.map((item, i) => { const start = offset; offset += valid ? item.amount / total * 100 : 0; return `${COLORS[i % COLORS.length]} ${start}% ${offset}%`; });
+  return <section className="flow-chart" aria-label={title}><h3>{title}</h3><div className="flow-chart-content">
+    {valid ? <div role="img" aria-label={`${title} 합계 ${money(total)}. 항목별 금액과 비율은 목록 참조.`} className="flow-donut" style={{ background: `conic-gradient(${stops.join(",")})` }}><div><span>합계</span><strong>{money(total)}</strong></div></div> : <div className="flow-chart-empty">{segments.length ? "환불·음수 내역은 아래 금액으로 확인하세요." : "확정 내역 없음"}</div>}
+    <ul className="flow-legend">{segments.map((item, i) => <li key={item.id}><span className="flow-dot" style={{ background: COLORS[i % COLORS.length] }} /><span>{item.label}</span><strong>{money(item.amount)}</strong><small>{valid ? share(item.amount, total) : "비율 계산 불가"}</small></li>)}</ul>
+  </div>{items.length > segments.length ? <details><summary>모든 분류의 금액·비중 보기</summary><ul className="flow-full-list">{items.map(item => <li key={item.id}><span>{item.label}</span><strong>{money(item.amount)}</strong><small>{valid ? share(item.amount, total) : "비율 계산 불가"}</small></li>)}</ul></details> : null}</section>;
+}
+function MonthAnalysis({ flow, previous, onClose }: { flow: MonthlyFlow; previous?: MonthlyFlow; onClose: () => void }) {
+  const [byCategory, setByCategory] = useState(false);
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => { ref.current?.focus({ preventScroll: true }); ref.current?.scrollIntoView({ block: "start", behavior: "auto" }); }, [flow.month]);
+  const costs = [{ id: "fixed", label: "고정비", amount: flow.fixed }, { id: "variable", label: "변동비", amount: flow.variable }, ...(flow.unclassified ? [{ id: "unknown", label: "구분 미지정·확인 필요", amount: flow.unclassified }] : [])];
+  return <section ref={ref} tabIndex={-1} className="panel month-analysis" id="month-analysis" aria-labelledby="month-analysis-title" onKeyDown={e => { if (e.key === "Escape") onClose(); }}>
+    <div className="section-heading"><div><span className="eyebrow">월별 상세분석 · 달력월 기준</span><h2 id="month-analysis-title">{flow.month} 상세분석</h2></div><button onClick={onClose} aria-label="월별 상세분석 닫기">닫기 ×</button></div>
+    <div className="flow-metrics detail-metrics">{([['수입', 'income'], ['총지출', 'expense'], ['잔액', 'balance']] as const).map(([label, key]) => <div key={key}><span>{label}</span><strong>{money(flow[key])}</strong><Comparison value={flow[key]} previous={previous?.[key]} spending={key === "expense"} /></div>)}</div>
+    <div className="flow-charts"><Donut title="수입 구성" items={flow.incomeCategories} total={flow.income} /><div><div className="flow-chart-controls" role="group" aria-label="지출 분석 기준"><button aria-pressed={!byCategory} onClick={() => setByCategory(false)}>귀속별</button><button aria-pressed={byCategory} onClick={() => setByCategory(true)}>카테고리별</button></div><Donut title={byCategory ? "지출 카테고리 구성" : "상화 · 하율 · 기타 지출 구성"} items={byCategory ? flow.expenseCategories : flow.owners} total={flow.expense} /></div></div>
+    <div className="flow-detail-grid"><section><h3>고정비 / 변동비</h3><p className="muted">확정 소비지출과 환불 기준 · 총지출 {money(flow.expense)}</p><ul className="flow-full-list" data-testid="cost-breakdown">{costs.map(item => <li key={item.id}><span>{item.label}</span><strong>{money(item.amount)}</strong><small>{costs.every(c => c.amount >= 0) ? share(item.amount, flow.expense) : "비율 계산 불가"}</small></li>)}</ul><p className="flow-note">고정비는 기존 반복규칙 또는 직접 지정한 구분을 사용합니다. 변동비는 원장에서 지정한 지출만 합산합니다. 구분 미지정 거래는 추정하지 않으며 원장의 ‘지출 구분’에서 선택할 수 있습니다. 환불은 원거래의 구분을 따릅니다.</p><p className="flow-note">저축·투자·대출원금 상환 {money(flow.allocation)}은 소비지출에서 제외합니다. 이를 뺀 여유자금은 {money(sumSafe(flow.balance, -flow.allocation))}입니다.</p></section>
+    <section><h3>주요 지출 순위</h3><ol className="flow-ranking">{flow.expenseCategories.filter(item => item.amount > 0).slice(0, 8).map(item => <li key={item.id}><span>{item.label}</span><strong>{money(item.amount)}</strong></li>)}</ol>{!flow.expenseCategories.some(item => item.amount > 0) ? <p className="muted">순지출이 있는 분류가 없습니다.</p> : null}<p className="flow-note">환불을 차감한 카테고리별 순지출 순위입니다.</p></section></div>
+  </section>;
+}
+export default function Dashboard(props: Props) {
+  const { data } = props;
+  const [allData, setAllData] = useState<LedgerData | null>(null), [error, setError] = useState(""), [revision, setRevision] = useState(0);
+  const [year, setYear] = useState(""), [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const controller = new AbortController(); setAllData(null); setError(""); setSelectedMonth(null);
+    void (async () => { try {
+      const response = await fetch("/api/dashboard", { cache: "no-store", credentials: "same-origin", signal: controller.signal });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "월별 흐름을 조회하지 못했습니다.");
+      if (!Array.isArray(body.transactions) || body.record_count !== body.transactions.length || body.family?.id !== data.family.id) throw new Error("가족의 전체 거래를 확인하지 못했습니다. 다시 조회하세요.");
+      if (!controller.signal.aborted) setAllData(body);
+    } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "월별 흐름 조회 실패"); } })();
+    return () => controller.abort();
+  }, [data, revision]);
+  const result = useMemo(() => { try { return { flows: allData ? monthlyFlows(allData.transactions, allData.categories) : [], error: "" }; } catch (cause) { return { flows: [], error: cause instanceof Error ? cause.message : "집계 실패" }; } }, [allData]);
+  const flows = result.flows, flowMap = useMemo(() => new Map(flows.map(flow => [flow.month, flow])), [flows]);
+  const latest = flows.at(-1), prior = latest ? flowMap.get(previousMonth(latest.month)) : undefined;
+  const years = [...new Set(flows.map(flow => flow.month.slice(0, 4)))].reverse(), chosenYear = years.includes(year) ? year : years[0];
+  const selected = selectedMonth ? flowMap.get(selectedMonth) : undefined;
+  const close = () => { setSelectedMonth(null); trigger.current?.focus(); };
+  return <div className="finance-dashboard">
+    <FinancialStatus familyId={data.family.id} />
+    {error || result.error ? <section className="panel notice error-notice" role="alert">{error || result.error}<button onClick={() => setRevision(n => n + 1)}>월별 흐름 다시 조회</button></section> : !allData ? <section className="panel" role="status">전체 거래에서 월별 흐름을 계산하는 중…</section> : latest ? <>
+      <section className="panel latest-flow" aria-labelledby="latest-flow-title"><div className="section-heading"><div><span className="eyebrow">최근 월 핵심 요약</span><h2 id="latest-flow-title">{latest.month} 재정 흐름</h2><p>확정 거래가 있는 가장 최근 월 · 달력월 기준</p></div><span className="badge">수입 − 소비지출 = 잔액</span></div>
+        <div className="flow-metrics">{([['총수입', 'income'], ['총지출', 'expense'], ['월 잔액', 'balance']] as const).map(([label, key]) => <div key={key} className={key === "balance" ? "flow-balance" : ""}><span>{label}</span><strong data-testid={`latest-${key}`}>{money(latest[key])}</strong><Comparison value={latest[key]} previous={prior?.[key]} spending={key === "expense"} /></div>)}</div>
+        <p className="flow-note">저축·투자·원금상환은 별도 자금배분입니다. 잔액은 실제 계좌 잔고와 다를 수 있습니다.</p>
       </section>
-</>}
-      <section className="panel"><div className="section-heading"><h2>돈이 많이 나간 곳</h2><span className="muted">상위 5개</span></div><div className="bar-chart spending-chart">{spending.slice(0, 5).map(c => <button className="spending-row" key={c.id} onClick={() => onTransactions(undefined, "category:" + c.id)}><span className="bar-label"><span>{c.major} · {c.minor}</span><strong>{money(c.actual)}</strong></span><span className="bar-track"><span style={{ width: c.actual / highest * 100 + "%" }} /></span></button>)}{!spending.length && <div className="dashboard-empty"><strong>아직 확정된 소비지출이 없어요</strong><p>지출을 기록하면 많이 쓴 분류부터 보여드려요.</p></div>}</div><p className="muted chart-note">환불은 차감하고, 저축과 원금상환은 따로 집계해요.</p></section>
-    </div>
-    <section className="panel recurring-overview"><div className="section-heading"><div><h2>{isRange ? "이 기간 확인할 고정비" : "이번 달 확인할 고정비"}</h2><p>고정비·반복거래 중 아직 확정하지 않은 내역이에요.</p></div><span className="recurring-tag">미확정 {pending.length}건 · 확정 {confirmed}건</span></div>
-      <div className="planned-summary"><div><span>아직 나갈 예정인 돈</span><button className="number-link" onClick={() => onTransactions(undefined, "plannedOut")}>{money(total.plannedOut)}</button><small>고정비를 포함한 모든 예정 지출·배분</small></div><div><span>예정 지출까지 반영하면</span><strong className={afterPlanned < 0 ? "negative" : ""}>{money(afterPlanned)}</strong><small>현재 남은 돈 − 예정 지출·배분 · 예정 수입 제외</small></div></div>
-      {total.plannedIncome > 0 && <p className="muted planned-income">예정 수입 {money(total.plannedIncome)}은 아직 들어오지 않아 계산에서 제외했어요.</p>}
-      {pending.length ? <ul className="upcoming-list">{pending.slice(0, 4).map(t => <li key={t.id}><span className="upcoming-date">{t.date.slice(5).replace("-", "/")}</span><div><strong>{t.description}</strong><small>{t.owner} · {KINDS[t.kind]}</small></div><strong>{money(t.amount)}</strong></li>)}</ul> : <p className="dashboard-empty">확인할 고정비가 없어요. 새 반복 항목은 고정비 메뉴에서 등록할 수 있어요.</p>}
-      <button className="dashboard-link text-button" onClick={() => onTransactions(undefined, "planned")}>예정 내역 검토·확정 →</button>
-    </section>
-    <section className="panel"><div className="section-heading"><h2>상화 · 하율 · 함께 쓴 돈</h2><span className="muted">귀속별 확정 내역</span></div><div className="owner-overview">{OWNERS.map(owner => { const s = summarize(data.transactions, owner); return <button key={owner} className="owner-card" onClick={() => onTransactions(owner)}><span className="owner-name">{owner === "기타" ? "기타 · 공통" : owner}<span aria-hidden="true">↗</span></span><dl><div><dt>수입</dt><dd>{money(s.income)}</dd></div><div><dt>소비지출</dt><dd>{money(s.expense)}</dd></div><div><dt>저축·투자·원금상환</dt><dd>{money(s.allocation)}</dd></div><div className="owner-remaining"><dt>남은 돈</dt><dd className={s.remaining < 0 ? "negative" : ""}>{money(s.remaining)}</dd></div></dl></button>; })}</div></section>
-    {!rangePeriod && <section className="panel annual-overview"><div className="section-heading"><div><h2>올해 흐름 보기</h2><p>{month.slice(0, 4)}년 월별로 수입과 지출을 비교해요.</p></div><button aria-expanded={annual} onClick={() => setAnnual(!annual)}>{annual ? "연간 비교 접기" : "연간 비교 펼치기"}</button></div>{annual && (!data.annual_transactions ? <p role="status">연간 자료를 불러오는 중…</p> : <div className="table-scroll"><table className="report-table"><thead><tr>{["월", "수입", "소비지출", "저축·투자·원금상환", "남은 돈", "계획상 남은 돈"].map(title => <th key={title}>{title}</th>)}</tr></thead><tbody>{Array.from({ length: 12 }, (_, i) => { const m = month.slice(0, 4) + "-" + String(i + 1).padStart(2, "0"), a = summarize(data.annual_transactions!.filter(t => t.date.startsWith(m))), p = budgetSummary((data.annual_budgets ?? []).filter(b => b.month === m), data.categories); return <tr key={m} className={m === month ? "total-row" : ""}><th>{i + 1}월</th>{[a.income, a.expense, a.allocation, a.remaining, p.remaining].map((v, column) => <td key={column} className={"numeric" + (v < 0 ? " negative" : "")}>{money(v)}</td>)}</tr>; })}</tbody></table></div>)}</section>}
-    <div className="dashboard-details">
-      <details className="panel"><summary>자산·대출·저축 현황 자세히 보기</summary><FinancialStatus familyId={data.family.id} /></details>
-      <details className="panel"><summary>{isRange ? "분류별 예정·확정 자세히 보기" : "분류별 계획과 실제 자세히 보기"}</summary><p className="muted">{isRange ? "선택 기간의 거래만 집계하며 예정과 확정을 구분해요." : "차이 = 계획 − 실제 · 환불은 원거래 분류에서 차감해요."}</p><div className="table-scroll"><table className="report-table"><thead><tr><th>유형 · 분류</th><th className="numeric">{isRange ? "미확정 예정" : "계획"}</th><th className="numeric">확정</th>{!isRange && <th className="numeric">차이</th>}</tr></thead><tbody>{categoryRows.map(c => <tr key={c.id}><th>{KINDS[c.kind]} · {c.major} / {c.minor}</th><td className="numeric">{money(isRange ? c.pending : c.plan)}</td><td className="numeric"><button className="number-link" onClick={() => onTransactions(undefined, "category:" + c.id)}>{money(c.actual)}</button></td>{!isRange && <td className={"numeric" + (c.plan - c.actual < 0 ? " negative" : "")}>{money(sumSafe(c.plan, -c.actual))}</td>}</tr>)}</tbody></table>{!categoryRows.length && <p className="empty">계획예산이나 확정 거래를 등록하면 비교할 수 있어요.</p>}</div></details>
-      <details className="panel"><summary>고정비 전체 내역 보기 · {recurring.length}건</summary><div className="table-scroll"><table className="report-table"><thead><tr><th>항목</th><th>귀속</th><th>일자</th><th className="numeric">예정금액</th><th className="numeric">현재금액</th><th>상태</th></tr></thead><tbody>{recurring.map(t => <tr key={t.id}><th>{t.description}</th><td>{t.owner}</td><td>{t.date}</td><td className="numeric">{money(t.planned_amount ?? t.amount)}</td><td className="numeric">{money(t.amount)}</td><td><span className={"badge" + (t.status === "planned" ? " warning" : "")}>{STATUSES[t.status]}</span></td></tr>)}</tbody></table>{!recurring.length && <p className="empty">고정비 메뉴에서 반복 항목을 등록하세요.</p>}</div></details>
-      {!isRange && <details className="panel budget-editor-details" id="budget-editor"><summary>이번 달 예산 설정·편집</summary><BudgetEditor data={data} month={month} onDirty={onDirty} onSaved={onSaved} /></details>}
-      <details className="panel"><summary>최근 거래내역 보기</summary><div className="table-scroll"><table className="report-table"><thead><tr><th>날짜</th><th>귀속</th><th>내용</th><th>유형</th><th className="numeric">금액</th><th>상태</th></tr></thead><tbody>{[...data.transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8).map(t => <tr key={t.id}><td>{t.date}</td><td>{t.owner}</td><th>{t.description}</th><td>{KINDS[t.kind]}</td><td className="numeric">{money(t.amount)}</td><td>{STATUSES[t.status]}</td></tr>)}</tbody></table>{!data.transactions.length && <p className="empty">저장된 거래가 없어요.</p>}</div></details>
-    </div>
+      <section className="panel monthly-flow-table" aria-labelledby="monthly-flow-title"><div className="section-heading"><div><h2 id="monthly-flow-title">월별 수입·지출 집계표</h2><p>상화 + 하율 + 기타 = 총지출 · 잔액을 누르면 상세분석이 펼쳐집니다.</p></div><label className="flow-year">조회 연도<select aria-label="집계표 조회 연도" value={chosenYear} onChange={e => { setYear(e.target.value); setSelectedMonth(null); }}>{years.map(value => <option key={value} value={value}>{value}년</option>)}</select></label></div>
+      <div className="table-scroll" role="region" aria-label="월별 수입 지출 표" tabIndex={0}><table className="report-table flow-table"><caption className="sr-only">달력월 기준 확정 거래. 잔액은 수입에서 소비지출을 뺀 금액입니다.</caption><thead><tr>{['월','수입','상화','하율','기타','총지출','잔액'].map((label, index) => <th key={label} scope="col" className={index ? "numeric" : ""}>{label}</th>)}</tr></thead><tbody>{Array.from({ length: 12 }, (_, i) => `${chosenYear}-${String(i + 1).padStart(2, '0')}`).map(month => { const flow = flowMap.get(month); return <tr key={month} className={selectedMonth === month ? "flow-selected" : ""} data-testid={`flow-${month}`}><th scope="row">{Number(month.slice(5))}월</th>{flow ? <><td className="numeric">{money(flow.income)}</td>{flow.owners.map(owner => <td className="numeric" key={owner.id}>{money(owner.amount)}</td>)}<td className="numeric flow-total">{money(flow.expense)}</td><td className="numeric"><button className="flow-balance-button" aria-label={`${month} 잔액 ${money(flow.balance)} 상세분석`} aria-expanded={selectedMonth === month} aria-controls="month-analysis" onClick={e => { trigger.current = e.currentTarget; setSelectedMonth(selectedMonth === month ? null : month); }}>{money(flow.balance)} <span aria-hidden="true">↗</span></button></td></> : <td colSpan={6} className="muted">확정 내역 없음</td>}</tr>; })}</tbody></table></div><p className="flow-note">조회 조건의 급여주기·직접 선택 기간과 구분하여, 이 표는 매월 1일부터 말일까지 같은 기준으로 비교합니다. 예정·취소 거래와 이체·카드정산·대출금 수령은 제외합니다.</p></section>
+      {selected ? <MonthAnalysis key={selected.month} flow={selected} previous={flowMap.get(previousMonth(selected.month))} onClose={close} /> : null}
+    </> : <section className="panel"><h2>월별 흐름을 기다리고 있어요</h2><p>확정된 수입·지출이 등록되면 월별 비교와 상세분석을 확인할 수 있습니다.</p></section>}
+    <details className="panel selected-period-tools"><summary>선택 기간의 거래·예산·고정비 자세히 보기</summary><SelectedPeriodDashboard {...props} /></details>
   </div>;
 }

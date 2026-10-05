@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.18.0" },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
     "build": "vite build",
@@ -19,7 +21,8 @@
     "test:pages": "node tests/pages.test.ts",
     "test:pages:browser": "playwright test --config playwright.pages.config.ts",
     "test:signup": "node tests/signup.test.ts",
-    "test:assets": "node tests/assets.test.ts && node tests/asset-snapshot.test.ts"
+    "test:assets": "node tests/assets.test.ts && node tests/asset-snapshot.test.ts",
+    "test:dashboard": "node tests/dashboard.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
