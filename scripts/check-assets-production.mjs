@@ -66,7 +66,7 @@ export async function verifyAssetsAndModification(page, tx, ledgerPath) {
   await nav.getByRole('button').filter({ hasText: '상화 가계부' }).click();
   const stamp = page.locator(`[data-testid="transaction-updated-at"][data-transaction-id="${tx.id}"]`);
   await expectDate(stamp, tx.updated_at);
-  await page.getByLabel('1행 내용', { exact: true }).fill(`${tx.description} 수정`);
+  await page.getByLabel('2행 내용', { exact: true }).fill(`${tx.description} 수정`);
   const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/transactions' && r.request().method() === 'POST');
   await page.getByRole('button', { name: '변경사항 저장', exact: true }).click();
   const saved = await pending; assert.equal(saved.status(), 200, `Ledger edit failed: ${await saved.text()}`);

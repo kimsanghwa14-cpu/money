@@ -49,15 +49,15 @@ test("default payroll, cross-month grid, all-history and custom range preserve d
   await page.getByLabel("조회 연월",{exact:true}).fill("2026-10");
   await expect(page.getByTestId("period-label")).toContainText("2026-10-21 ~ 2026-11-20");
   await page.getByRole("navigation").getByRole("button",{name:"상화 가계부"}).click();
-  await expect(page.getByRole("textbox",{name:"1행 날짜",exact:true})).toHaveValue("2026-10-21");
-  await expect(page.getByRole("textbox",{name:"3행 날짜",exact:true})).toHaveValue("2026-11-20");
+  await expect(page.getByRole("textbox",{name:"2행 날짜",exact:true})).toHaveValue("2026-10-21");
+  await expect(page.getByRole("textbox",{name:"4행 날짜",exact:true})).toHaveValue("2026-11-20");
   await expect(page.locator('.ledger-table input[data-col="0"]')).toHaveCount(3);
   await page.getByRole("button",{name:"전체 내역",exact:true}).click();
   await expect(page.locator('.ledger-table input[data-col="0"]')).toHaveCount(6);
   await page.getByRole("button",{name:"기간 직접 선택",exact:true}).click();
   await page.getByLabel("조회 시작일").fill("2026-11-01");await page.getByLabel("조회 종료일").fill("2026-11-20");await page.getByRole("button",{name:"기간 적용",exact:true}).click();
   await expect(page.locator('.ledger-table input[data-col="0"]')).toHaveCount(2);
-  await expect(page.getByRole("textbox",{name:"1행 날짜",exact:true})).toHaveValue("2026-11-05");
+  await expect(page.getByRole("textbox",{name:"2행 날짜",exact:true})).toHaveValue("2026-11-05");
   const download=page.waitForEvent("download");await page.getByRole("button",{name:"기간 전체 CSV",exact:true}).click();
   expect((await download).suggestedFilename()).toContain("2026-11-01_2026-11-20");
   expect(store.rows.map(row=>row.date)).toEqual(["2026-10-20","2026-10-21","2026-11-05","2026-11-20","2026-11-21","2027-01-20"]);
@@ -98,11 +98,14 @@ test("search and export cover all pages, not only the rendered page",async({page
   await page.getByRole("button",{name:"전체 내역",exact:true}).click();
   await page.getByRole("navigation").getByRole("button",{name:"상화 가계부"}).click();
   await expect(page.locator('.ledger-table input[data-col="0"]')).toHaveCount(200);
+  await expect(page.getByTestId("ledger-live-total")).toHaveText("82,215원");
   await page.getByRole("button",{name:"다음 거래 페이지"}).click();
-  await expect(page.getByRole("textbox",{name:"201행 날짜",exact:true})).toBeVisible();
+  await expect(page.getByRole("textbox",{name:"202행 날짜",exact:true})).toBeVisible();
+  await expect(page.getByTestId("ledger-live-total")).toHaveText("82,215원");
   await page.getByLabel("내용 검색").fill("가상 거래 405");
   await expect(page.locator('.ledger-table input[data-col="0"]')).toHaveCount(1);
-  await expect(page.getByRole("textbox",{name:"1행 내용",exact:true})).toHaveValue("가상 거래 405");
+  await expect(page.getByRole("textbox",{name:"2행 내용",exact:true})).toHaveValue("가상 거래 405");
+  await expect(page.getByTestId("ledger-live-total")).toHaveText("405원");
 });
 
 for (const admin of [false,true]) test(`personal columns, authorized audit and fixed rows remain at each month end: admin=${admin}`,async({page,request},testInfo)=>{
@@ -125,7 +128,7 @@ for (const admin of [false,true]) test(`personal columns, authorized audit and f
  for(const name of ["결제수단","계좌·카드"])await expect(heading(name)).toHaveCount(1);
  for(const name of ["지출 구분","예정금액"])await expect(heading(name)).toHaveCount(0);
  await expect(heading("거래ID·수정 이력")).toHaveCount(admin?1:0);
- await page.getByRole("textbox",{name:"4행 내용",exact:true}).fill("고정비 내용 수정 검증");
+ await page.getByRole("textbox",{name:"5행 내용",exact:true}).fill("고정비 내용 수정 검증");
  await page.getByRole("button",{name:"변경사항 저장",exact:true}).click();
  await expect(page.getByRole("button",{name:"변경사항 저장",exact:true})).toBeDisabled();
  const saved=store.rows.find(row=>row.id===fixed.id)!;
@@ -178,4 +181,39 @@ test("requested column order, pointer and keyboard resizing, persistence and new
  await page.screenshot({path:testInfo.outputPath("resized-ledger.png"),fullPage:true});
  await page.getByRole("button",{name:"열 너비 초기화",exact:true}).click();
  await expect(page.getByRole("separator",{name:"날짜 열 너비 조절",exact:true})).toHaveAttribute("aria-valuenow","128");
+});
+
+test("first ledger row totals update immediately for edits, blank/new rows, deletions, cancel and filters",async({page,request},testInfo)=>{
+ const store=await mockApp(page,request), salary=store.rows[1];
+ await page.getByLabel("조회 연월",{exact:true}).fill("2026-10");
+ await page.getByRole("navigation").getByRole("button",{name:"상화 가계부"}).click();
+ const total=page.getByTestId("ledger-live-total");
+ await expect(page.locator('.ledger-table tbody tr').first()).toHaveAttribute("data-testid","ledger-total-row");
+ await expect(page.getByTestId("ledger-total-row").locator('.row-number')).toHaveText("1");
+ await expect(page.getByTestId("ledger-total-row").locator('input')).toHaveCount(0);
+ await expect(total).toHaveText("650원");
+ await page.locator(`input[data-id="${salary.id}"][data-col="4"]`).fill("600");
+ await expect(total).toHaveText("750원");
+ await page.getByRole("button",{name:"+ 행 추가",exact:true}).click();
+ await expect(total).toHaveText("750원");
+ const added=page.locator('.ledger-table .new-row');
+ await added.locator('input[data-col="4"]').fill("12,3");
+ await expect(total).toContainText("계산 불가");
+ await added.locator('input[data-col="4"]').fill("25");
+ await expect(total).toHaveText("775원");
+ await added.locator('input[type="checkbox"]').check();
+ await page.getByRole("button",{name:"선택 삭제",exact:true}).click();
+ await expect(total).toHaveText("750원");
+ const salaryRow=page.locator('.ledger-table tbody tr').filter({has:page.locator(`input[data-id="${salary.id}"][data-col="0"]`)});
+ await salaryRow.locator('input[type="checkbox"]').check();
+ await page.getByRole("button",{name:"선택 삭제",exact:true}).click();
+ await expect(total).toHaveText("150원");
+ expect(store.rows.find(row=>row.id===salary.id)?.amount).toBe(500);
+ page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"변경 취소",exact:true}).click();
+ await expect(total).toHaveText("650원");
+ await page.getByLabel("내용 검색").fill("다음 달 소비");await expect(total).toHaveText("100원");
+ await page.getByLabel("내용 검색").fill("없는 검색 결과");await expect(total).toHaveText("0원");
+ await page.getByLabel("내용 검색").fill("");await expect(total).toHaveText("650원");
+ await page.screenshot({path:testInfo.outputPath("live-ledger-total.png"),fullPage:true});
+ expect(store.rows).toHaveLength(6);
 });
