@@ -3,8 +3,10 @@ import { resolvePeriod, selectionFromParams, periodContains } from "../../src/li
 import type { Transaction } from "../../src/lib/domain";
 const origin="https://money-ab4.pages.dev";
 const cat="00000000-0000-4000-8000-000000000001", incomeCat="00000000-0000-4000-8000-000000000002";
+const testCategories=[{id:cat,family_id:"test-family",kind:"expense",major:"생활",minor:"기타지출"},{id:incomeCat,family_id:"test-family",kind:"income",major:"수입",minor:"급여"},
+ ...["saving","loan_principal","transfer","settlement","loan_received"].map((kind,index)=>({id:`00000000-0000-4000-8000-${String(index+3).padStart(12,"0")}`,family_id:"test-family",kind,major:kind,minor:kind}))];
 function record(index:number,date:string,description:string,amount:number,kind:Transaction["kind"]="expense"):Transaction {
-  return {id:`11111111-1111-4111-8111-${String(index).padStart(12,"0")}`,date,description,amount,kind,owner:"상화",category_id:kind==="income"?incomeCat:cat,
+  return {id:`11111111-1111-4111-8111-${String(index).padStart(12,"0")}`,date,description,amount,kind,owner:"상화",category_id:testCategories.find(category=>category.kind===(kind==="refund"?"expense":kind))!.id,
     status:"confirmed",version:1,memo:"브라우저 테스트 전용 가상 자료",payment_method_id:null,account_id:null,target_account_id:null,planned_amount:null,original_transaction_id:null,source_id:null,source_namespace:null};
 }
 async function mockApp(page:Page,request:APIRequestContext,large=false,admin=false) {
@@ -17,14 +19,14 @@ async function mockApp(page:Page,request:APIRequestContext,large=false,admin=fal
     const url=new URL(route.request().url());
     if(url.pathname==="/api/session")return route.fulfill({json:{configured:true}});
     if(url.pathname==="/api/assets")return route.fulfill({json:{assets:[],asset_snapshot:null}});
-    if(url.pathname==="/api/dashboard") return route.fulfill({json:{family:{id:"test-family",name:"검증용 가계부"},record_count:store.rows.length,transactions:store.rows,categories:[{id:cat,family_id:"test-family",kind:"expense",major:"생활",minor:"기타지출"},{id:incomeCat,family_id:"test-family",kind:"income",major:"수입",minor:"급여"}]}});
+    if(url.pathname==="/api/dashboard") return route.fulfill({json:{family:{id:"test-family",name:"검증용 가계부"},record_count:store.rows.length,transactions:store.rows,categories:testCategories}});
     if(url.pathname==="/api/ledger") {
       store.requests.push(url.search);
       if(url.searchParams.has("ids"))return route.fulfill({json:{transactions:store.rows.filter(row=>(url.searchParams.get("ids")??"").split(",").includes(row.id))}});
       const period=resolvePeriod(selectionFromParams(url.searchParams),url.searchParams.get("annual")==="1");
       const transactions=store.rows.filter(row=>periodContains(period,row.date));
       const body={family:{id:"test-family",name:"검증용 가계부"},member:{user_id:"test-user",display_name:"sangfire",role:"owner"},permissions:{view_modification_dates:admin},members:[],transactions,record_count:transactions.length,period,
-        categories:[{id:cat,family_id:"test-family",kind:"expense",major:"생활",minor:"기타지출"},{id:incomeCat,family_id:"test-family",kind:"income",major:"수입",minor:"급여"}],accounts:[{id:"22222222-2222-4222-8222-222222222222",name:"검증 계좌",kind:"bank"}],methods:[{id:"33333333-3333-4333-8333-333333333333",name:"검증 결제"}],budgets:[],rules:[],...(period.annual?{annual_transactions:transactions,annual_budgets:[]}: {})};
+        categories:testCategories,accounts:[{id:"22222222-2222-4222-8222-222222222222",name:"검증 계좌",kind:"bank"}],methods:[{id:"33333333-3333-4333-8333-333333333333",name:"검증 결제"}],budgets:[],rules:[],...(period.annual?{annual_transactions:transactions,annual_budgets:[]}: {})};
       return route.fulfill({json:body});
     }
     if(url.pathname==="/api/transactions") {
@@ -98,14 +100,14 @@ test("search and export cover all pages, not only the rendered page",async({page
   await page.getByRole("button",{name:"전체 내역",exact:true}).click();
   await page.getByRole("navigation").getByRole("button",{name:"상화 가계부"}).click();
   await expect(page.locator('.ledger-table input[data-col="0"]')).toHaveCount(200);
-  await expect(page.getByTestId("ledger-live-total")).toHaveText("82,215원");
+  await expect(page.getByTestId("ledger-live-total")).toHaveText("-82,215원");
   await page.getByRole("button",{name:"다음 거래 페이지"}).click();
   await expect(page.getByRole("textbox",{name:"202행 날짜",exact:true})).toBeVisible();
-  await expect(page.getByTestId("ledger-live-total")).toHaveText("82,215원");
+  await expect(page.getByTestId("ledger-live-total")).toHaveText("-82,215원");
   await page.getByLabel("내용 검색").fill("가상 거래 405");
   await expect(page.locator('.ledger-table input[data-col="0"]')).toHaveCount(1);
   await expect(page.getByRole("textbox",{name:"2행 내용",exact:true})).toHaveValue("가상 거래 405");
-  await expect(page.getByTestId("ledger-live-total")).toHaveText("405원");
+  await expect(page.getByTestId("ledger-live-total")).toHaveText("-405원");
 });
 
 for (const admin of [false,true]) test(`personal columns, authorized audit and fixed rows remain at each month end: admin=${admin}`,async({page,request},testInfo)=>{
@@ -191,29 +193,45 @@ test("first ledger row totals update immediately for edits, blank/new rows, dele
  await expect(page.locator('.ledger-table tbody tr').first()).toHaveAttribute("data-testid","ledger-total-row");
  await expect(page.getByTestId("ledger-total-row").locator('.row-number')).toHaveText("1");
  await expect(page.getByTestId("ledger-total-row").locator('input')).toHaveCount(0);
- await expect(total).toHaveText("650원");
+ await expect(total).toHaveText("350원");
  await page.locator(`input[data-id="${salary.id}"][data-col="4"]`).fill("600");
- await expect(total).toHaveText("750원");
+ await expect(total).toHaveText("450원");
  await page.getByRole("button",{name:"+ 행 추가",exact:true}).click();
- await expect(total).toHaveText("750원");
+ await expect(total).toHaveText("450원");
  const added=page.locator('.ledger-table .new-row');
  await added.locator('input[data-col="4"]').fill("12,3");
  await expect(total).toContainText("계산 불가");
  await added.locator('input[data-col="4"]').fill("25");
- await expect(total).toHaveText("775원");
+ await expect(total).toHaveText("425원");
  await added.locator('input[type="checkbox"]').check();
  await page.getByRole("button",{name:"선택 삭제",exact:true}).click();
- await expect(total).toHaveText("750원");
+ await expect(total).toHaveText("450원");
  const salaryRow=page.locator('.ledger-table tbody tr').filter({has:page.locator(`input[data-id="${salary.id}"][data-col="0"]`)});
  await salaryRow.locator('input[type="checkbox"]').check();
  await page.getByRole("button",{name:"선택 삭제",exact:true}).click();
- await expect(total).toHaveText("150원");
+ await expect(total).toHaveText("-150원");
  expect(store.rows.find(row=>row.id===salary.id)?.amount).toBe(500);
  page.once("dialog",dialog=>dialog.accept());await page.getByRole("button",{name:"변경 취소",exact:true}).click();
- await expect(total).toHaveText("650원");
- await page.getByLabel("내용 검색").fill("다음 달 소비");await expect(total).toHaveText("100원");
+ await expect(total).toHaveText("350원");
+ await page.getByLabel("내용 검색").fill("다음 달 소비");await expect(total).toHaveText("-100원");
  await page.getByLabel("내용 검색").fill("없는 검색 결과");await expect(total).toHaveText("0원");
- await page.getByLabel("내용 검색").fill("");await expect(total).toHaveText("650원");
+ await page.getByLabel("내용 검색").fill("");await expect(total).toHaveText("350원");
  await page.screenshot({path:testInfo.outputPath("live-ledger-total.png"),fullPage:true});
  expect(store.rows).toHaveLength(6);
+});
+
+test("ledger net total matches confirmed accounting for refunds, allocations and excluded movements",async({page,request})=>{
+ const store=await mockApp(page,request);
+ store.rows.push({...record(7,"2026-11-12","환불",20,"refund"),original_transaction_id:store.rows[2].id},record(8,"2026-10-25","저축",30,"saving"),record(9,"2026-10-26","원금상환",40,"loan_principal"),record(10,"2026-10-27","내부이체",999999,"transfer"),record(11,"2026-10-28","카드정산",999999,"settlement"),record(12,"2026-10-29","대출수령",999999,"loan_received"),{...record(13,"2026-10-30","예정수입",999999,"income"),status:"planned"},{...record(14,"2026-10-30","예정지출",999999),status:"planned"},{...record(15,"2026-10-31","취소지출",999999),status:"cancelled"});
+ await page.getByLabel("조회 연월",{exact:true}).fill("2026-10");
+ await page.getByRole("navigation").getByRole("button",{name:"상화 가계부"}).click();
+ const total=page.getByTestId("ledger-live-total");
+ await expect(total).toHaveText("300원");
+ await expect(page.locator('.sheet-footer strong')).toContainText("300원");
+ await page.getByLabel("상태 필터",{exact:true}).selectOption("planned");await expect(total).toHaveText("0원");
+ await page.getByLabel("상태 필터",{exact:true}).selectOption("cancelled");await expect(total).toHaveText("0원");
+ await page.getByLabel("상태 필터",{exact:true}).selectOption("");
+ await page.getByLabel("거래유형 필터",{exact:true}).selectOption("expense");await expect(total).toHaveText("-130원");
+ await page.getByLabel("거래유형 필터",{exact:true}).selectOption("income");await expect(total).toHaveText("500원");
+ await page.getByLabel("거래유형 필터",{exact:true}).selectOption("transfer");await expect(total).toHaveText("0원");
 });

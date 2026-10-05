@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ClipboardEvent, type PointerEvent } from "react";
-import { OWNERS, KINDS, STATUSES, koreaDateTime, blankRow, fromDraft, money, parseAmount, sumSafe, toDraft, validateDraft, exportCsv, type Draft, type LedgerData, type Owner, type Transaction, type CellErrors } from "@/lib/domain";
+import { OWNERS, KINDS, STATUSES, koreaDateTime, blankRow, fromDraft, money, parseAmount, summarize, toDraft, validateDraft, exportCsv, type Draft, type LedgerData, type Owner, type Transaction, type CellErrors } from "@/lib/domain";
 import { COLUMNS, categoryParts, cellText, pasteRows, ledgerColumns, sortLedgerRows, isFixedRow, categorySelection, type ColumnKey } from "@/lib/grid";
 import { HttpError, postJson } from "@/lib/http";
 type Props = { data: LedgerData; month: string; owner?: Owner; onDirty: (scope: string, dirty: boolean) => void; onSaved: () => Promise<void>; initialFilter?: string; defaultDate?: string; exportLabel?: string; personalPeriod?: "payroll" | "calendar" };
@@ -83,10 +83,12 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
     return () => observer.disconnect();
   }, []);
   let total = 0, amountErrors = 0;
+  const totalRows: Transaction[] = [];
   for (const row of visible) {
     if (row.version === 0 && !row.amount.trim()) continue;
-    try { total = sumSafe(total, parseAmount(row.amount)); } catch { amountErrors++; }
+    try { totalRows.push(fromDraft(row)); } catch { amountErrors++; }
   }
+  try { total = summarize(totalRows).remaining; } catch { amountErrors++; }
   const update = (id: string, patch: Partial<Draft>) => {
     setRows(current => current.map(r => r.id === id ? { ...r, ...patch } : r));
     setServerErrors(current => { const next = { ...current }; delete next[id]; return next; }); setMessage(""); setConflicts([]);
@@ -236,6 +238,7 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
       <div className="toolbar-spacer" /><button onClick={cancel} disabled={!dirty || saving}>변경 취소</button>
       <button className="primary" onClick={save} disabled={!dirty || saving}>{saving ? "저장 중…" : "변경사항 저장"}</button>
     </div>
+    <p className="column-resize-hint">합계는 확정 수입과 환불에서 소비지출·저축·투자·원금상환을 뺀 금액입니다. 예정·취소·내부이체·카드정산·대출금 수령은 제외합니다.</p>
     <p className="column-resize-hint">열 제목 오른쪽 경계를 드래그해 너비를 조절하세요. 모바일에서도 가능합니다.</p>
     <div className="filters">
       <input aria-label="내용 검색" placeholder="기간 내 전체 내용·메모 검색" value={search} onChange={e => setSearch(e.target.value)} />
@@ -252,6 +255,6 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
       <tr className="ledger-live-total" data-testid="ledger-total-row"><td className="row-selector" /><th scope="row" className="row-number">1</th>{headers.map(header => <td key={header.key} className={header.key === "amount" ? "numeric" : ""}>{header.key === "date" ? <strong>합계</strong> : header.key === "description" ? <span className="muted">필터 전체 · {visible.length.toLocaleString("ko-KR")}행</span> : header.key === "amount" ? <strong data-testid="ledger-live-total" role="status" aria-live="polite" aria-atomic="true">{amountErrors ? `계산 불가 · 금액 오류 ${amountErrors}행` : money(total)}</strong> : null}</td>)}</tr>
       {pageRows.map((row, localIndex) => { const index = pageStart + localIndex; return <tr key={row.id} data-recurring={isFixedRow(row) ? "true" : undefined} className={[row.version === 0 ? "new-row" : "", isFixedRow(row) ? "recurring-row" : ""].filter(Boolean).join(" ")}><td className="row-selector"><input aria-label={`${index + 2}행 선택`} type="checkbox" checked={selected.has(row.id)} onChange={e => setSelected(current => { const next = new Set(current); if (e.target.checked) next.add(row.id); else next.delete(row.id); return next; })} /></td><td className="row-number">{index + 2}</td>{columns.map((c, i) => cell(row, c.key, index, i))}{canViewModificationDates ? <td className="meta-cell updated-cell" data-testid="transaction-updated-at" data-transaction-id={row.id}><time dateTime={row.updated_at}>{row.version === 0 ? "저장 전" : koreaDateTime(row.updated_at)}</time></td> : null}{!personal ? <td className="numeric meta-cell">{row.planned_amount === null ? "—" : money(row.planned_amount)}</td> : null}{canViewModificationDates ? <td className="meta-cell"><code>{row.id}</code><span>생성 {data.members?.find(m=>m.user_id===row.created_by)?.display_name ?? row.created_by ?? "저장 전"}<br />수정 {data.members?.find(m=>m.user_id===row.updated_by)?.display_name ?? row.updated_by ?? "저장 전"} · 버전 {row.version}</span></td> : null}</tr>; })}
     </tbody></table>{visible.length === 0 && <div className="empty"><strong>{rows.length ? "조건에 맞는 거래가 없습니다." : "이 기간의 첫 거래를 입력하세요."}</strong><p>행 추가 후 입력하거나, 날짜 셀에 엑셀의 여러 행을 붙여넣을 수 있습니다.</p><button onClick={() => addRows(1)}>+ 첫 행 추가</button></div>}</div>
-    <div className="sheet-footer"><span>조건에 맞는 {visible.length}행 / 전체 {rows.length}행 · 현재 페이지 {pageRows.length}행 · Tab으로 다음 셀, Enter로 다음 행</span><strong>{amountErrors ? `합계 계산 불가 · 금액 오류 ${amountErrors}행` : `필터 전체 금액 합계 ${money(total)}`}</strong><button onClick={exportVisible} disabled={!visible.length}>필터 전체 CSV</button></div>
+    <div className="sheet-footer"><span>조건에 맞는 {visible.length}행 / 전체 {rows.length}행 · 현재 페이지 {pageRows.length}행 · Tab으로 다음 셀, Enter로 다음 행</span><strong>{amountErrors ? `합계 계산 불가 · 금액 오류 ${amountErrors}행` : `필터 전체 순합계 ${money(total)}`}</strong><button onClick={exportVisible} disabled={!visible.length}>필터 전체 CSV</button></div>
   </section>;
 }
