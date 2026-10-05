@@ -42,8 +42,14 @@ export function applyPastedCells(original: Draft, values: string[], startCol: nu
     else if (key === "original_transaction_id") row.original_transaction_id = value || null;
     else row[key] = value;
   });
+  if (categoryChanged) {
+    const matches = categories.filter(c => c.major === major && c.minor === minor);
+    const matched = matches.find(c => c.kind === (row.kind === "refund" ? "expense" : row.kind))
+      ?? (!columns.slice(startCol, startCol + values.length).includes("kind") && matches.length === 1 ? matches[0] : undefined);
+    if (matched) Object.assign(row, categorySelection(row, matched));
+    else row.category_id = `unresolved:${major}|${minor}`;
+  }
   if (row.kind !== "expense") row.cost_type = null;
-  if (categoryChanged) row.category_id = categories.find(c => c.kind === (row.kind === "refund" ? "expense" : row.kind) && c.major === major && c.minor === minor)?.id ?? `unresolved:${major}|${minor}`;
   return row;
 }
 export function pasteRows(rows: Draft[], text: string, startRow: number, startCol: number, columns: ColumnKey[], owner: Owner | "", month: string, categories: Category[], methods: Named[], accounts: Account[]): Draft[] {
@@ -64,10 +70,10 @@ export function isFixedRow(row: Pick<Draft, "kind" | "cost_type" | "recurrence_r
   return !!row.recurrence_rule_id || (row.kind === "expense" && row.cost_type === "fixed");
 }
 export function ledgerColumns(personal: boolean, extras: boolean) {
-  const hidden = personal
-    ? ["memo", "target_account_id", "original_transaction_id", "payment_method_id", "account_id"]
-    : ["memo", "target_account_id", "original_transaction_id"];
-  return COLUMNS.filter(column => !(personal && column.key === "cost_type") && (extras || !hidden.includes(column.key)));
+  const primary = ["date", "major", "minor", "description", "amount", "owner", "status"];
+  const ordered = [...primary.map(key => COLUMNS.find(column => column.key === key)!), ...COLUMNS.filter(column => !primary.includes(column.key) && column.key !== "kind")];
+  return ordered.filter(column => primary.includes(column.key) || (extras && !(personal && column.key === "cost_type")));
+
 }
 export function sortLedgerRows(rows: Draft[], sort: string, personalPeriod?: "payroll" | "calendar"): Draft[] {
   const direction = sort.endsWith("desc") ? -1 : 1;
@@ -82,4 +88,10 @@ export function sortLedgerRows(rows: Draft[], sort: string, personalPeriod?: "pa
     if (sort.startsWith("amount")) return (Number(a.amount.replaceAll(",", "")) - Number(b.amount.replaceAll(",", ""))) * direction;
     return a.date.localeCompare(b.date) * direction;
   });
+}
+
+export function categorySelection(row: Pick<Draft, "kind" | "cost_type" | "original_transaction_id">, category: Category): Partial<Draft> {
+  const kind = row.kind === "refund" && category.kind === "expense" ? "refund" : category.kind;
+  return { category_id: category.id, kind, cost_type: kind === "expense" ? row.cost_type : null,
+    original_transaction_id: kind === "refund" ? row.original_transaction_id : null };
 }

@@ -1,10 +1,21 @@
 "use client";
-import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ClipboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ClipboardEvent, type PointerEvent } from "react";
 import { OWNERS, KINDS, STATUSES, koreaDateTime, blankRow, fromDraft, money, parseAmount, sumSafe, toDraft, validateDraft, exportCsv, type Draft, type LedgerData, type Owner, type Transaction, type CellErrors } from "@/lib/domain";
-import { COLUMNS, categoryParts, cellText, pasteRows, ledgerColumns, sortLedgerRows, isFixedRow, type ColumnKey } from "@/lib/grid";
+import { COLUMNS, categoryParts, cellText, pasteRows, ledgerColumns, sortLedgerRows, isFixedRow, categorySelection, type ColumnKey } from "@/lib/grid";
 import { HttpError, postJson } from "@/lib/http";
 type Props = { data: LedgerData; month: string; owner?: Owner; onDirty: (scope: string, dirty: boolean) => void; onSaved: () => Promise<void>; initialFilter?: string; defaultDate?: string; exportLabel?: string; personalPeriod?: "payroll" | "calendar" };
 const PAGE_SIZE = 200;
+const WIDTH_STORAGE = "money:ledger-column-widths:v1";
+const MIN_WIDTH = 64, MAX_WIDTH = 800;
+function storedWidths(): Record<string, number> {
+  try {
+    if (typeof window === "undefined") return {};
+    const value: unknown = JSON.parse(localStorage.getItem(WIDTH_STORAGE) ?? "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value).filter(([, width]) => typeof width === "number" && Number.isFinite(width) && width >= MIN_WIDTH && width <= MAX_WIDTH));
+  } catch { return {}; }
+}
+
 export function download(text: string, filename: string, type: string) {
   const url = URL.createObjectURL(new Blob([text], { type })), link = document.createElement("a");
   link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -25,6 +36,24 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
   const tableRef = useRef<HTMLDivElement>(null), busy = useRef(false), revealId = useRef<string | null>(null);
   const request = useRef<{ fingerprint: string; id: string } | null>(null);
   const columns = ledgerColumns(personal, extras);
+  const [widths, setWidths] = useState<Record<string, number>>(storedWidths);
+  const resizing = useRef<{ key: string; pointer: number; start: number; width: number } | null>(null);
+  const headers = [...columns, ...(canViewModificationDates ? [{ key: "updated_at", label: "수정일 (한국시간)", width: 174 }] : []),
+    ...(!personal ? [{ key: "planned_amount", label: "예정금액", width: 130 }] : []),
+    ...(canViewModificationDates ? [{ key: "audit", label: "거래ID·수정 이력", width: 280 }] : [])];
+  const columnWidth = (key: string, fallback: number) => widths[key] ?? fallback;
+  const setWidth = (key: string, value: number) => setWidths(current => ({ ...current, [key]: Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value))) }));
+  useEffect(() => { try { localStorage.setItem(WIDTH_STORAGE, JSON.stringify(widths)); } catch { /* Resizing remains available when browser storage is blocked. */ } }, [widths]);
+  const beginResize = (event: PointerEvent<HTMLElement>, key: string) => {
+    if (event.button !== 0) return;
+    event.preventDefault(); event.stopPropagation();
+    resizing.current = { key, pointer: event.pointerId, start: event.clientX, width: event.currentTarget.parentElement!.getBoundingClientRect().width };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const endResize = (event: PointerEvent<HTMLElement>) => {
+    resizing.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
   const baseMap = useMemo(() => new Map(baseline.map(r => [r.id, toDraft(r)])), [baseline]);
   const changed = useMemo(() => rows.filter(r => !baseMap.has(r.id) || JSON.stringify(r) !== JSON.stringify(baseMap.get(r.id))), [rows, baseMap]);
   const dirty = changed.length > 0 || deletes.length > 0;
@@ -52,7 +81,10 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
   };
   const makeRow = () => {
     const row = blankRow(owner ?? "", defaultDate?.slice(0, 7) ?? month, data.categories);
-    return defaultDate ? { ...row, date: defaultDate } : row;
+    const selectedKind = Object.hasOwn(KINDS, kind) ? kind as Draft["kind"] : row.kind;
+    return { ...row, date: defaultDate ?? row.date, kind: selectedKind,
+      category_id: data.categories.find(category => category.kind === (selectedKind === "refund" ? "expense" : selectedKind))?.id ?? row.category_id };
+
   };
   const addRows = (n: number) => {
     if (changed.length + deletes.length + n > 1000) { setMessage("한 번에 저장할 변경사항은 1,000행 이내입니다. 먼저 저장하세요."); return; }
@@ -113,8 +145,8 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
     try {
       const result = await postJson("/api/transactions", { ...payload, request_id: request.current!.id }); committed = true;
       await onSaved();
-      setDeletes([]); setRows(current => current.map(r => ({ ...r, version: changed.some(c => c.id === r.id) ? r.version + 1 : r.version })));
-      setBaseline(rows.map(r => ({ ...fromDraft(r), version: changed.some(c => c.id === r.id) ? r.version + 1 : r.version })));
+      const committedRows = rows.map(r => ({ ...fromDraft(r), version: changed.some(c => c.id === r.id) ? r.version + 1 : r.version }));
+      setDeletes([]); setRows(committedRows.map(toDraft)); setBaseline(committedRows);
       setMessage(`${result.saved}건의 변경사항을 DB에 저장했습니다. 조회 기간 밖으로 이동한 내역은 전체 내역에서 확인하세요.`); setSelected(new Set()); setAttempted(false); setConflicts([]);
     } catch (e) {
       if (e instanceof HttpError && e.details.errors) setServerErrors(e.details.errors as Record<string, CellErrors>);
@@ -159,13 +191,18 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
     if (key === "cost_type" || key === "owner" || key === "kind" || key === "status" || key === "payment_method_id" || key === "account_id" || key === "target_account_id" || key === "major" || key === "minor") {
       const kindCategories = data.categories.filter(c => c.kind === (row.kind === "refund" ? "expense" : row.kind));
       const [major, minor] = categoryParts(row, data.categories);
-      const options = key === "cost_type" ? [["fixed", "고정비"], ["variable", "변동비"]] : key === "owner" ? OWNERS.map(v => [v, v]) : key === "kind" ? Object.entries(KINDS) : key === "status" ? Object.entries(STATUSES) : key === "payment_method_id" ? data.methods.map(m => [m.id, m.name]) : key === "account_id" || key === "target_account_id" ? data.accounts.map(a => [a.id, a.name]) : key === "major" ? [...new Set(kindCategories.map(c => c.major))].map(v => [v, v]) : kindCategories.filter(c => c.major === major).map(c => [c.minor, c.minor]);
-      const value = key === "major" ? major : key === "minor" ? minor : row[key] ?? "";
+      const majorGroups = [...new Map(data.categories.map(category => [JSON.stringify([category.kind, category.major]), category])).values()];
+      const options = key === "cost_type" ? [["fixed", "고정비"], ["variable", "변동비"]] : key === "owner" ? OWNERS.map(v => [v, v]) : key === "kind" ? Object.entries(KINDS) : key === "status" ? Object.entries(STATUSES) : key === "payment_method_id" ? data.methods.map(m => [m.id, m.name]) : key === "account_id" || key === "target_account_id" ? data.accounts.map(a => [a.id, a.name]) : key === "major" ? majorGroups.map(category => [JSON.stringify([category.kind, category.major]), `${category.major}${majorGroups.filter(group => group.major === category.major).length > 1 ? ` · ${KINDS[category.kind]}` : ""}`]) : kindCategories.filter(c => c.major === major).map(c => [c.minor, c.minor]);
+      const value = key === "major" ? JSON.stringify([row.kind === "refund" ? "expense" : row.kind, major]) : key === "minor" ? minor : row[key] ?? "";
       input = <select {...common} disabled={saving || (key === "cost_type" && row.kind !== "expense")} value={value} onChange={e => {
         const v = e.target.value;
         if (key === "kind") { if (["refund", "transfer", "settlement"].includes(v)) setExtras(true); update(row.id, { kind: v as Draft["kind"], category_id: data.categories.find(c => c.kind === (v === "refund" ? "expense" : v))?.id ?? "", original_transaction_id: null, cost_type: v === "expense" ? row.cost_type : null }); }
-        else if (key === "major") update(row.id, { category_id: kindCategories.find(c => c.major === v)?.id ?? "" });
-        else if (key === "minor") update(row.id, { category_id: kindCategories.find(c => c.major === major && c.minor === v)?.id ?? "" });
+        else if (key === "major") {
+          const chosen = majorGroups.find(category => JSON.stringify([category.kind, category.major]) === v);
+          if (chosen) { const patch = categorySelection(row, chosen); if (["refund", "transfer", "settlement"].includes(patch.kind ?? "")) setExtras(true); update(row.id, patch); }
+          else update(row.id, { category_id: "" });
+        }
+        else if (key === "minor") { const chosen = kindCategories.find(c => c.major === major && c.minor === v); update(row.id, chosen ? categorySelection(row, chosen) : { category_id: "" }); }
         else update(row.id, { [key]: v || ((key.endsWith("_id") || key === "cost_type") ? null : "") });
       }}>
         <option value="">{key === "owner" ? "귀속 확인" : key === "cost_type" ? row.kind === "refund" ? "원거래 기준" : row.recurrence_rule_id ? "고정비 (반복규칙)" : "구분 미지정" : "선택"}</option>
@@ -173,7 +210,7 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
         {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
       </select>;
     } else input = <input {...common} type="text" value={String(row[key] ?? "")} placeholder={key === "date" ? "YYYY-MM-DD" : key === "amount" ? "0" : ""} inputMode={key === "amount" ? "numeric" : undefined} className={key === "amount" ? "number-input" : ""} onChange={e => update(row.id, { [key]: e.target.value })} onBlur={() => { if (key === "amount") { try { update(row.id, { amount: parseAmount(row.amount).toLocaleString("ko-KR") }); } catch { /* Keep invalid input for correction. */ } } }} />;
-    return <td key={key} className={`${edited ? "edited" : ""} ${error ? "cell-error" : ""}`} style={{ minWidth: COLUMNS.find(c => c.key === key)?.width }}>{key === "description" && isFixedRow(row) && <span className="recurring-tag sheet-recurring-tag">고정비</span>}{input}{error && <span className="cell-message" id={`err-${row.id}-${key}`}>! {error}</span>}</td>;
+    return <td key={key} className={`${edited ? "edited" : ""} ${error ? "cell-error" : ""}`} >{key === "description" && isFixedRow(row) && <span className="recurring-tag sheet-recurring-tag">고정비</span>}{input}{error && <span className="cell-message" id={`err-${row.id}-${key}`}>! {error}</span>}</td>;
   };
   return <section className="sheet-section">
     <div className="section-heading"><div><h2>{owner ? `${owner} 거래원장` : "전체 거래원장"}</h2><p>{personal ? "각 월의 일반 거래 아래에 고정비를 모아 표시합니다. 날짜는 실제 거래일을 입력하세요." : "월을 나누지 않고 선택 기간의 내역을 함께 편집합니다. 날짜는 실제 거래일을 입력하세요."}</p></div><span className={dirty ? "badge warning" : "badge"}>{dirty ? `미저장 ${changed.length}행 · 삭제 ${deletes.length}행` : "DB 저장 내역"}</span></div>
@@ -183,9 +220,11 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
       <button onClick={() => copy()} disabled={!selected.size || saving}>선택 복사</button><button onClick={deleteRows} disabled={!selected.size || saving}>선택 삭제</button>
       <button onClick={() => copy(true)} disabled={!baseline.length || saving}>최근 내역 재사용</button>
       <label className="check-label"><input type="checkbox" checked={extras} onChange={e => { setExtras(e.target.checked); if (personal && !e.target.checked) setMethod(""); }} /> 보조 열</label>
+      <button onClick={() => setWidths({})}>열 너비 초기화</button>
       <div className="toolbar-spacer" /><button onClick={cancel} disabled={!dirty || saving}>변경 취소</button>
       <button className="primary" onClick={save} disabled={!dirty || saving}>{saving ? "저장 중…" : "변경사항 저장"}</button>
     </div>
+    <p className="column-resize-hint">열 제목 오른쪽 경계를 드래그해 너비를 조절하세요. 모바일에서도 가능합니다.</p>
     <div className="filters">
       <input aria-label="내용 검색" placeholder="기간 내 전체 내용·메모 검색" value={search} onChange={e => setSearch(e.target.value)} />
       <select aria-label="거래유형 필터" value={kind} onChange={e => setKind(e.target.value)}><option value="">모든 거래유형</option><option value="plannedOut">예정 지출·배분 대상</option><option value="allocation">저축·투자 + 원금상환</option><option value="balance">자금배분 집계 대상</option><option value="consumption">소비 집계 대상</option>{Object.entries(KINDS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select>
@@ -197,8 +236,8 @@ export default function Spreadsheet({ data, month, owner, onDirty, onSaved, init
     {message && <div className="notice" role="status">{message}{dirty && <><button onClick={compare} disabled={saving}>최신 내역 비교</button><button onClick={() => download(JSON.stringify({ month, period: exportLabel, rows, deletes }, null, 2), `미저장입력-${exportLabel ?? month}.json`, "application/json")}>입력 백업(JSON)</button></>}</div>}
     {conflicts.map(server => <div className="conflict" key={server.id}><strong>{server.description}</strong><p>DB: {server.date} · {server.owner} · {money(server.amount)} · 버전 {server.version}</p><p>입력: {rows.find(r => r.id === server.id)?.description ?? "삭제 예정"} · {rows.find(r => r.id === server.id)?.amount ?? ""}</p><button onClick={() => resolveConflict(server, false)}>DB 내역 사용</button><button onClick={() => resolveConflict(server, true)}>내 변경을 새 버전에 적용</button></div>)}
     {pages > 1 ? <div className="view-toolbar"><button aria-label="이전 거래 페이지" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>이전</button><span>{currentPage + 1} / {pages} 페이지 · 필터와 합계는 전체 {visible.length.toLocaleString("ko-KR")}행 기준</span><button aria-label="다음 거래 페이지" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>다음</button><span>선택 {selected.size}행</span></div> : null}
-    <div className="table-scroll ledger-table" ref={tableRef}><table><thead><tr><th className="row-selector"><input aria-label="현재 페이지 행 전체 선택" type="checkbox" checked={pageRows.length > 0 && pageRows.every(r => selected.has(r.id))} onChange={e => setSelected(current => { const next = new Set(current); for (const row of pageRows) { if (e.target.checked) next.add(row.id); else next.delete(row.id); } return next; })} /></th><th className="row-number">행</th>{columns.map(c => <Fragment key={c.key}><th style={{ minWidth: c.width }}>{c.label}</th>{c.key === "amount" && canViewModificationDates ? <th>수정일 (한국시간)</th> : null}</Fragment>)}{!personal ? <th>예정금액</th> : null}{canViewModificationDates ? <th>거래ID·수정 이력</th> : null}</tr></thead><tbody>
-      {pageRows.map((row, localIndex) => { const index = pageStart + localIndex; return <tr key={row.id} data-recurring={isFixedRow(row) ? "true" : undefined} className={[row.version === 0 ? "new-row" : "", isFixedRow(row) ? "recurring-row" : ""].filter(Boolean).join(" ")}><td className="row-selector"><input aria-label={`${index + 1}행 선택`} type="checkbox" checked={selected.has(row.id)} onChange={e => setSelected(current => { const next = new Set(current); if (e.target.checked) next.add(row.id); else next.delete(row.id); return next; })} /></td><td className="row-number">{row.version === 0 ? "＋" : index + 1}</td>{columns.map((c, i) => <Fragment key={c.key}>{cell(row, c.key, index, i)}{c.key === "amount" && canViewModificationDates ? <td className="meta-cell updated-cell" data-testid="transaction-updated-at" data-transaction-id={row.id}><time dateTime={row.updated_at}>{row.version === 0 ? "저장 전" : koreaDateTime(row.updated_at)}</time></td> : null}</Fragment>)}{!personal ? <td className="numeric meta-cell">{row.planned_amount === null ? "—" : money(row.planned_amount)}</td> : null}{canViewModificationDates ? <td className="meta-cell"><code>{row.id}</code><span>생성 {data.members?.find(m=>m.user_id===row.created_by)?.display_name ?? row.created_by ?? "저장 전"}<br />수정 {data.members?.find(m=>m.user_id===row.updated_by)?.display_name ?? row.updated_by ?? "저장 전"} · 버전 {row.version}</span></td> : null}</tr>; })}
+    <div className="table-scroll ledger-table" ref={tableRef}><table style={{ tableLayout: "fixed", width: 80 + headers.reduce((total, header) => total + columnWidth(header.key, header.width), 0), minWidth: "100%" }}><colgroup><col style={{ width: 38 }} /><col style={{ width: 42 }} />{headers.map(header => <col key={header.key} style={{ width: columnWidth(header.key, header.width) }} />)}</colgroup><thead><tr><th className="row-selector"><input aria-label="현재 페이지 행 전체 선택" type="checkbox" checked={pageRows.length > 0 && pageRows.every(r => selected.has(r.id))} onChange={e => setSelected(current => { const next = new Set(current); for (const row of pageRows) { if (e.target.checked) next.add(row.id); else next.delete(row.id); } return next; })} /></th><th className="row-number">행</th>{headers.map(header => <th key={header.key} aria-label={header.label} data-column={header.key} className="resizable-column"><span>{header.label}</span><span role="separator" tabIndex={0} aria-label={`${header.label} 열 너비 조절`} aria-orientation="vertical" aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH} aria-valuenow={columnWidth(header.key, header.width)} className="column-resizer" onPointerDown={event => beginResize(event, header.key)} onPointerMove={event => { const drag = resizing.current; if (drag && drag.pointer === event.pointerId) setWidth(drag.key, drag.width + event.clientX - drag.start); }} onPointerUp={endResize} onPointerCancel={endResize} onLostPointerCapture={() => { resizing.current = null; }} onKeyDown={event => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); setWidth(header.key, columnWidth(header.key, header.width) + (event.key === "ArrowRight" ? 1 : -1) * (event.shiftKey ? 50 : 10)); } }} /></th>)}</tr></thead><tbody>
+      {pageRows.map((row, localIndex) => { const index = pageStart + localIndex; return <tr key={row.id} data-recurring={isFixedRow(row) ? "true" : undefined} className={[row.version === 0 ? "new-row" : "", isFixedRow(row) ? "recurring-row" : ""].filter(Boolean).join(" ")}><td className="row-selector"><input aria-label={`${index + 1}행 선택`} type="checkbox" checked={selected.has(row.id)} onChange={e => setSelected(current => { const next = new Set(current); if (e.target.checked) next.add(row.id); else next.delete(row.id); return next; })} /></td><td className="row-number">{row.version === 0 ? "＋" : index + 1}</td>{columns.map((c, i) => cell(row, c.key, index, i))}{canViewModificationDates ? <td className="meta-cell updated-cell" data-testid="transaction-updated-at" data-transaction-id={row.id}><time dateTime={row.updated_at}>{row.version === 0 ? "저장 전" : koreaDateTime(row.updated_at)}</time></td> : null}{!personal ? <td className="numeric meta-cell">{row.planned_amount === null ? "—" : money(row.planned_amount)}</td> : null}{canViewModificationDates ? <td className="meta-cell"><code>{row.id}</code><span>생성 {data.members?.find(m=>m.user_id===row.created_by)?.display_name ?? row.created_by ?? "저장 전"}<br />수정 {data.members?.find(m=>m.user_id===row.updated_by)?.display_name ?? row.updated_by ?? "저장 전"} · 버전 {row.version}</span></td> : null}</tr>; })}
     </tbody></table>{visible.length === 0 && <div className="empty"><strong>{rows.length ? "조건에 맞는 거래가 없습니다." : "이 기간의 첫 거래를 입력하세요."}</strong><p>행 추가 후 입력하거나, 날짜 셀에 엑셀의 여러 행을 붙여넣을 수 있습니다.</p><button onClick={() => addRows(1)}>+ 첫 행 추가</button></div>}</div>
     <div className="sheet-footer"><span>조건에 맞는 {visible.length}행 / 전체 {rows.length}행 · 현재 페이지 {pageRows.length}행 · Tab으로 다음 셀, Enter로 다음 행</span><strong>{amountErrors ? `합계 계산 불가 · 금액 오류 ${amountErrors}행` : `필터 전체 금액 합계 ${money(total)}`}</strong><button onClick={exportVisible} disabled={!visible.length}>필터 전체 CSV</button></div>
   </section>;

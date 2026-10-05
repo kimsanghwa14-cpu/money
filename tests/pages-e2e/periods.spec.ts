@@ -137,3 +137,45 @@ for (const admin of [false,true]) test(`personal columns, authorized audit and f
  await page.getByRole("button",{name:"전체 내역",exact:true}).click();
  await expect.poll(dates).toEqual(["2026-10-20","2026-10-21","2026-11-20","2026-11-21","2026-11-01","2026-11-05","2027-01-20"]);
 });
+
+test("requested column order, pointer and keyboard resizing, persistence and new-order paste",async({page,request},testInfo)=>{
+ const store=await mockApp(page,request);
+ await page.getByLabel("조회 연월",{exact:true}).fill("2026-10");
+ await page.getByRole("navigation").getByRole("button",{name:"상화 가계부"}).click();
+ await expect(page.locator('.ledger-table th[data-column]')).toHaveText(["날짜","대분류","소분류","내용","금액","귀속","상태"]);
+ await expect(page.getByRole("columnheader",{name:"거래유형",exact:true})).toHaveCount(0);
+ const handle=page.getByRole("separator",{name:"날짜 열 너비 조절",exact:true});
+ await handle.scrollIntoViewIfNeeded();
+ const before=Number(await handle.getAttribute("aria-valuenow")), box=(await handle.boundingBox())!;
+ if(testInfo.project.name==="mobile"){
+   const cdp=await page.context().newCDPSession(page);
+   const point={x:box.x+box.width/2,y:box.y+box.height/2};
+   await cdp.send("Input.dispatchTouchEvent",{type:"touchStart",touchPoints:[point]});
+   await cdp.send("Input.dispatchTouchEvent",{type:"touchMove",touchPoints:[{...point,x:point.x+80}]});
+   await cdp.send("Input.dispatchTouchEvent",{type:"touchEnd",touchPoints:[]});
+   await cdp.detach();
+ }else{
+   await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
+   await page.mouse.move(box.x+box.width/2+80,box.y+box.height/2,{steps:8});await page.mouse.up();
+ }
+ await expect.poll(async()=>Number(await handle.getAttribute("aria-valuenow"))).toBeGreaterThan(before+50);
+ const dragged=Number(await handle.getAttribute("aria-valuenow"));
+ await handle.focus();await page.keyboard.press("ArrowLeft");
+ await expect(handle).toHaveAttribute("aria-valuenow",String(dragged-10));
+ await page.reload();await page.getByRole("navigation").getByRole("button",{name:"상화 가계부"}).click();
+ await expect(page.getByRole("separator",{name:"날짜 열 너비 조절",exact:true})).toHaveAttribute("aria-valuenow",String(dragged-10));
+ await page.getByLabel("조회 연월",{exact:true}).fill("2026-10");
+ await page.getByRole("button",{name:"+ 행 추가",exact:true}).click();
+ const input=page.locator('.new-row input[data-col="0"]');
+ await input.evaluate(element=>{const clipboardData=new DataTransfer();clipboardData.setData("text/plain","2026-10-22\t수입\t급여\t새 순서 급여 입력\t1234\t상화\t확정");element.dispatchEvent(new ClipboardEvent("paste",{clipboardData,bubbles:true,cancelable:true}));});
+ await page.getByRole("button",{name:"변경사항 저장",exact:true}).click();
+ await expect.poll(()=>store.rows.filter(row=>row.description==="새 순서 급여 입력").length).toBe(1);
+ const saved=store.rows.find(row=>row.description==="새 순서 급여 입력")!;
+ expect(saved.kind).toBe("income");expect(saved.amount).toBe(1234);expect(saved.date).toBe("2026-10-22");
+ expect(store.rows.find(row=>row.description==="가상 급여")?.kind).toBe("income");
+ await expect(page.getByRole("button",{name:"변경사항 저장",exact:true})).toBeDisabled();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath("resized-ledger.png"),fullPage:true});
+ await page.getByRole("button",{name:"열 너비 초기화",exact:true}).click();
+ await expect(page.getByRole("separator",{name:"날짜 열 너비 조절",exact:true})).toHaveAttribute("aria-valuenow","128");
+});

@@ -97,3 +97,15 @@ test("personal ledger removes optional fields and pins fixed rows within each pa
  assert.doesNotThrow(()=>sortLedgerRows(rows,'date-asc','payroll'));
  assert.equal(isFixedRow(draft('unclassified','2026-11-01')),false);
 });
+
+test("displayed ledger columns paste in the requested order and preserve existing transaction types",()=>{
+ const keys=ledgerColumns(true,false).map(column=>column.key);
+ assert.deepEqual(keys,["date","major","minor","description","amount","owner","status"]);
+ assert.equal(ledgerColumns(false,true).some(column=>column.key==="kind"),false);
+ const pasted=pasteRows([],"2026-10-22\tincome\tincome\t급여 확인\t3000\t상화\t확정\n2026-10-23\t생활\t식비\t식비 확인\t100\t상화\t확정",0,0,keys,"상화","2026-10",categories,[],[]);
+ assert.deepEqual(pasted.map(row=>row.kind),["income","expense"]);
+ pasted.forEach(row=>assert.deepEqual(validateDraft(row,categories,[],[]),{}));
+ const refund={...transaction({kind:"refund",category_id:categoryIds.expense,original_transaction_id:crypto.randomUUID()}),amount:"100"};
+ const edited=pasteRows([refund],"생활\t식비",0,1,keys,"상화","2026-10",categories,[],[])[0];
+ assert.equal(edited.kind,"refund");assert.equal(edited.original_transaction_id,refund.original_transaction_id);
+});
